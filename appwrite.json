@@ -1,0 +1,94 @@
+{
+    "projectId": "almostRedditPlace",
+    "projectName": "Almost Reddit Place",
+    "collections": [
+        {
+            "$id": "pixelsPublic",
+            "$read": [
+                "role:all"
+            ],
+            "$write": [],
+            "name": "pixelsPublic",
+            "enabled": true,
+            "permission": "collection",
+            "attributes": [
+                {
+                    "key": "x",
+                    "type": "integer",
+                    "status": "available",
+                    "required": true,
+                    "array": false,
+                    "min": null,
+                    "max": null,
+                    "default": null
+                },
+                {
+                    "key": "userId",
+                    "type": "string",
+                    "status": "available",
+                    "required": true,
+                    "array": false,
+                    "size": 255,
+                    "default": null
+                },
+                {
+                    "key": "y",
+                    "type": "integer",
+                    "status": "available",
+                    "required": true,
+                    "array": false,
+                    "min": null,
+                    "max": null,
+                    "default": null
+                },
+                {
+                    "key": "hex",
+                    "type": "string",
+                    "status": "available",
+                    "required": true,
+                    "array": false,
+                    "size": 6,
+                    "default": null
+                },
+                {
+                    "key": "createdAt",
+                    "type": "integer",
+                    "status": "available",
+                    "required": false,
+                    "array": false,
+                    "min": null,
+                    "max": null,
+                    "default": null
+                }
+            ],
+            "indexes": [
+                {
+                    "key": "positionIndex",
+                    "type": "unique",
+                    "status": "available",
+                    "attributes": [
+                        "x",
+                        "y"
+                    ],
+                    "orders": [
+                        "ASC",
+                        "ASC"
+                    ]
+                }
+            ]
+        }
+    ],
+    "functions": [
+        {
+            "$id": "colorPixel",
+            "name": "colorPixel",
+            "runtime": "deno-1.14",
+            "path": "functions/colorPixel",
+            "entrypoint": "src/mod.ts",
+            "execute": ["role:member"],
+            "events": [],
+            "schedule": "",
+            "timeout": 15
+        }
+    ]
+}

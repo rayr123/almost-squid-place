@@ -24,6 +24,7 @@
       }
     </style>
 
+    <script src="https://cdn.jsdelivr.net/npm/appwrite@7.0.0"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="//unpkg.com/alpinejs" defer></script>
     <script
@@ -33,68 +34,110 @@
       referrerpolicy="no-referrer"
     ></script>
 
+    <script>
+      // You can define variable here with configurations for the application
+      /*
+      var globalConfig = {
+        pixelsX: 10,
+        pixelsY: 10
+      }
+      */
+    </script>
+
     <script defer>
+      var globalConfig = globalConfig || {};
+
+      const appwrite = new Appwrite();
+
+      appwrite
+        .setEndpoint("https://appwrite.matejbaco.eu/v1")
+        .setProject("almostRedditPlace");
+
       function alpineSetup() {
         return {
+          config: Object.assign(
+            {},
+            {
+              scaleLevels: [0.1, 0.2, 0.5, 1, 2, 3, 4, 5, 7, 9, 10],
+
+              pixelsX: 100,
+              pixelsY: 50,
+
+              colors: ["#f02e65", "#ffffff", "#000000"],
+
+              pixelSize: 10,
+              pixelStokeSize: 1,
+              pixelStrokeLength: 3,
+            },
+            globalConfig
+          ),
+
           state: {
-            // TODO: Move some to config
             isReady: false,
-            scaleLevel: 8, // Index, from 0. Production: 3
+            scaleLevel: 3, // Index, from 0.
             positionX: 0,
             positionY: 0,
-            pixelsX: 100,
-            pixelsY: 50,
 
-            colors: [
-              "red",
-              "pink",
-              "blue",
-              "purple",
-              "yellow",
-              "white",
-              "black",
-              "black",
-              "black",
-              "black",
-              "black",
-              "black",
-              "black",
-              "black",
-              "black",
-              "black",
-              "black",
-            ],
+            debounce: null,
 
-            selectedColor: "red",
+            selectedColor: "#f02e65",
 
-            pixelSize: 10,
-            pixelStokeSize: 1,
-            pixelStrokeLength: 3,
-
-            pixels: {
-              "0_0": "red",
-              "1_0": "green",
-              "2_0": "blue",
-              "1_1": "pink",
-            },
+            pixels: {},
           },
-
-          scaleLevels: [0.1, 0.2, 0.5, 1, 2, 3, 4, 5, 7, 9, 10],
 
           p5: null,
           canvas: null,
           sketch: null,
 
-          onColorPixel() {
-            const color = this.state.selectedColor;
-            const pixel = this.getCurrentPixel();
-            this.state.pixels[`${pixel.x}_${pixel.y}`] = color;
-            this.render();
+          async onColorPixel() {
+            if (this.state.isColoring) {
+              return;
+            }
+
+            this.state.isColoring = true;
+
+            try {
+              const color = this.state.selectedColor;
+              const pixel = this.getCurrentPixel();
+
+              try {
+                await appwrite.account.get();
+              } catch (err) {
+                await appwrite.account.createAnonymousSession();
+              }
+
+              const res = await appwrite.functions.createExecution(
+                "colorPixel",
+                JSON.stringify({
+                  x: pixel.x,
+                  y: pixel.y,
+                  hex: color,
+                }),
+                false
+              );
+
+              if (res.stderr) {
+                throw new Error(res.stderr);
+              }
+
+              const resJson = JSON.parse(
+                decodeURIComponent(escape(res.stdout))
+              );
+
+              if (!resJson.success && resJson.message) {
+                throw new Error(resJson.message);
+              }
+            } catch (err) {
+              console.error(err);
+              alert(err.message);
+            } finally {
+              this.state.isColoring = false;
+            }
           },
 
           // Utility function
           scaled(x, invert = false, customRounding = null) {
-            let scale = this.scaleLevels[this.state.scaleLevel];
+            let scale = this.config.scaleLevels[this.state.scaleLevel];
 
             if (invert) {
               scale = scale / (scale * scale);
@@ -105,26 +148,31 @@
               : Math.floor(x * scale);
           },
 
-          getCurrentPixel() {
+          getCurrentPixel(pos = {}) {
+            if (!pos.x) {
+              pos.x = this.sketch.width / 2;
+            }
+
+            if (!pos.y) {
+              pos.y = this.sketch.height / 2;
+            }
+
             const scaled = this.scaled.bind(this);
+
+            const { pixels, positionX, positionY } = this.state;
 
             const {
               pixelsX,
               pixelsY,
-              pixels,
-              positionX,
-              positionY,
-              pixelSize,
               pixelStrokeLength,
               pixelStokeSize,
-            } = this.state;
+              pixelSize,
+            } = this.config;
 
             const mousePosX =
-              -scaled(positionX) +
-              (this.sketch.width / 2 - scaled(pixelStokeSize) / 2);
+              -scaled(positionX) + (pos.x - scaled(pixelStokeSize) / 2);
             const mousePosY =
-              -scaled(positionY) +
-              (this.sketch.height / 2 - scaled(pixelStokeSize) / 2);
+              -scaled(positionY) + (pos.y - scaled(pixelStokeSize) / 2);
 
             const currentPixelX = Math.floor(mousePosX / scaled(pixelSize));
             const currentPixelY = Math.floor(mousePosY / scaled(pixelSize));
@@ -147,7 +195,63 @@
             return currentPixel;
           },
 
+          async fetchPixels() {
+            documents = [];
+            count = 1;
+
+            do {
+              const response = await appwrite.database.listDocuments(
+                "pixelsPublic",
+                [
+                  "x.lesserEqual(" + this.config.pixelsX + ")",
+                  "x.greaterEqual(0)",
+                  "y.lesserEqual(" + this.config.pixelsY + ")",
+                  "y.greaterEqual(0)",
+                ],
+                100,
+                documents.length
+              );
+
+              documents.push(...response.documents);
+              count = response.total;
+            } while (documents.length < count);
+
+            for (const document of documents) {
+              if (!this.state.pixels[document.$id]) {
+                if (document.hex === "ffffff") {
+                  if (this.state.pixels[document.$id]) {
+                    unset(this.state.pixels[document.$id]);
+                  }
+                } else {
+                  this.state.pixels[document.$id] = "#" + document.hex;
+                }
+              }
+            }
+
+            this.render(true);
+          },
+
           init() {
+            appwrite.subscribe(
+              ["collections.pixelsPublic.documents"],
+              (event) => {
+                if (
+                  event.event === "database.documents.update" ||
+                  event.event === "database.documents.create"
+                ) {
+                  if (event.payload === "ffffff") {
+                    if (this.state.pixels[event.payload.$id]) {
+                      unset(this.state.pixels[event.payload.$id]);
+                    }
+                  } else {
+                    this.state.pixels[event.payload.$id] =
+                      "#" + event.payload.hex;
+                    this.render();
+                  }
+                }
+              }
+            );
+
             setTimeout(() => {
               const s = (sketch) => {
                 sketch.setup = () => {
@@ -163,7 +267,7 @@
                   this.canvas = canvas;
                   this.sketch = sketch;
 
-                  this.render(true);
+                  this.fetchPixels();
                 };
 
                 // DO NOT USE
@@ -186,16 +290,16 @@
                     true,
                     event.movementY < 0 ? Math.floor : Math.ceil
                   );
-                  this.render();
-                };
 
-                sketch.mouseMoved = (event) => {
-                  if (event.target.nodeName.toLowerCase() !== "canvas") {
-                    return;
+                  // TODO: Support touch for mobile
+
+                  if (
+                    this.state.debounce === null ||
+                    this.state.debounce < Date.now() - 1
+                  ) {
+                    this.render();
+                    this.state.debounce = Date.now();
                   }
-
-                  // TODO: Only render if current pixel position changed
-                  this.render();
                 };
               };
 
@@ -211,7 +315,7 @@
           zoomIn() {
             this.state.scaleLevel = Math.min(
               this.state.scaleLevel + 1,
-              this.scaleLevels.length - 1
+              this.config.scaleLevels.length - 1
             );
             this.render();
           },
@@ -230,20 +334,20 @@
 
           renderBackgroud() {
             const scaled = this.scaled.bind(this);
+            const { pixels, positionX, positionY } = this.state;
 
             const {
               pixelsX,
               pixelsY,
-              pixels,
-              positionX,
-              positionY,
+              pixelStrokeLength,
+              pixelStokeSize,
               pixelSize,
-            } = this.state;
+            } = this.config;
 
             this.sketch.background("#e2e8f0");
 
             this.sketch.noStroke();
-            this.sketch.fill("#f1f5f9");
+            this.sketch.fill("#ffffff");
             this.sketch.rect(
               scaled(positionX),
               scaled(positionY),
@@ -257,16 +361,15 @@
 
             const scaled = this.scaled.bind(this);
 
+            const { pixels, positionX, positionY } = this.state;
+
             const {
               pixelsX,
               pixelsY,
-              pixels,
-              positionX,
-              positionY,
-              pixelSize,
               pixelStrokeLength,
               pixelStokeSize,
-            } = this.state;
+              pixelSize,
+            } = this.config;
 
             for (let x = 0; x < pixelsX; x++) {
               for (let y = 0; y < pixelsY; y++) {
@@ -287,17 +390,15 @@
             this.sketch.noStroke();
 
             const scaled = this.scaled.bind(this);
+            const { pixels, positionX, positionY } = this.state;
 
             const {
               pixelsX,
               pixelsY,
-              pixels,
-              positionX,
-              positionY,
-              pixelSize,
               pixelStrokeLength,
               pixelStokeSize,
-            } = this.state;
+              pixelSize,
+            } = this.config;
 
             const currentPixel = this.getCurrentPixel();
 
@@ -401,9 +502,34 @@
         <div
           class="relative z-20 flex flex-col items-center justify-center h-screen pb-20"
         >
-          <h1 class="text-white mb-6 font-bold text-3xl text-center">
-            Almost Reddit Place
-          </h1>
+          <div class="flex items-center mb-6 justify-center space-x-3">
+            <h1 class="text-white font-bold text-3xl text-center">
+              Almost Reddit Place
+            </h1>
+
+            <template hidden x-if="!state.isReady">
+              <svg
+                class="w-6 h-6 animate-spin text-white"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  class="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  stroke-width="4"
+                ></circle>
+                <path
+                  class="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                ></path>
+              </svg>
+            </template>
+          </div>
 
           <div class="container bg-white rounded-xl overflow-hidden">
             <div class="relative">
@@ -458,7 +584,7 @@
             <div
               class="overflow-x-auto col-span-8 flex flex-row space-x-3 items-center h-full"
             >
-              <template x-for="(color, i) in state.colors" :key="i">
+              <template x-for="(color, i) in config.colors" :key="i">
                 <div class="relative flex items-center justify-center h-full">
                   <template x-if="state.selectedColor === color">
                     <div
@@ -498,9 +624,32 @@
             <div class="col-span-4">
               <button
                 x-on:click="onColorPixel()"
-                class="text-white bg-[#f02e65] w-full rounded-xl py-3 px-9"
+                class="flex items-center justify-center space-x-3 text-white bg-[#f02e65] w-full rounded-xl py-3 px-9"
               >
-                Color Pixel
+                <p>Color Pixel</p>
+
+                <template hidden x-if="state.isColoring">
+                  <svg
+                    class="w-4 h-4 animate-spin text-white"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      class="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      stroke-width="4"
+                    ></circle>
+                    <path
+                      class="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                </template>
               </button>
             </div>
           </div>
