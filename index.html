@@ -73,6 +73,11 @@
           ),
 
           state: {
+            touch: {
+              clientY: null,
+              clientX: null
+            },
+
             isReady: false,
             scaleLevel: 3, // Index, from 0.
             positionX: 0,
@@ -276,6 +281,17 @@
                 sketch.mouseDragged = (event) => {
                   if (event.target.nodeName.toLowerCase() !== "canvas") {
                     return;
+                  }
+
+                  if(event.type === 'touchmove') {
+                    const difX = this.state.touch.clientX === null ? 0 : this.state.touch.clientX - event.touches[0].clientX;
+                    const difY = this.state.touch.clientY === null ? 0 : this.state.touch.clientY - event.touches[0].clientY;
+
+                    event.movementX = difX;
+                    event.movementY = difY;
+
+                    this.state.touch.clientX = event.touches[0].clientX;
+                    this.state.touch.clientY = event.touches[0].clientY;
                   }
 
                   const scaled = this.scaled.bind(this);
