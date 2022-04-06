@@ -278,6 +278,11 @@
                 // DO NOT USE
                 sketch.draw = () => {};
 
+                sketch.mouseReleased = (event) => {
+                  this.state.touch.clientX = null;
+                  this.state.touch.clientY = null;
+                }
+
                 sketch.mouseDragged = (event) => {
                   if (event.target.nodeName.toLowerCase() !== "canvas") {
                     return;
