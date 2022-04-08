@@ -76,7 +76,7 @@
           state: {
             touch: {
               clientY: null,
-              clientX: null
+              clientX: null,
             },
 
             isReady: false,
@@ -279,22 +279,87 @@
                 // DO NOT USE
                 sketch.draw = () => {};
 
+                sketch.keyPressed = (event) => {
+                  if (event.key === " ") {
+                    this.onColorPixel();
+                    return;
+                  }
+
+                  if (!isNaN(event.key)) {
+                    const colorIndex = +event.key - 1;
+                    this.state.selectedColor = this.config.colors[colorIndex];
+                    return;
+                  }
+
+                  let moveX = 0;
+                  let moveY = 0;
+
+                  if (
+                    event.key === "A" ||
+                    event.key === "a" ||
+                    event.key === "ArrowLeft"
+                  ) {
+                    moveX = +this.config.pixelSize;
+                  }
+
+                  if (
+                    event.key === "D" ||
+                    event.key === "d" ||
+                    event.key === "ArrowRight"
+                  ) {
+                    moveX = -this.config.pixelSize;
+                  }
+
+                  if (
+                    event.key === "W" ||
+                    (event.key === "w") | (event.key === "ArrowUp")
+                  ) {
+                    moveY = +this.config.pixelSize;
+                  }
+
+                  if (
+                    event.key === "S" ||
+                    event.key === "s" ||
+                    event.key === "ArrowDown"
+                  ) {
+                    moveY = -this.config.pixelSize;
+                  }
+
+                  if (event.shiftKey) {
+                    moveX *= 3;
+                    moveY *= 3;
+                  }
+
+                  this.state.positionX += moveX;
+                  this.state.positionY += moveY;
+
+                  if (moveX !== 0 || moveY !== 0) {
+                    this.render();
+                  }
+                };
+
                 sketch.mouseReleased = (event) => {
                   this.state.touch.clientX = null;
                   this.state.touch.clientY = null;
-                }
+                };
 
                 sketch.mouseDragged = (event) => {
                   event.stopPropagation();
                   event.preventDefault();
-                  
+
                   if (event.target.nodeName.toLowerCase() !== "canvas") {
                     return;
                   }
 
-                  if(event.type === 'touchmove') {
-                    const difX = this.state.touch.clientX === null ? 0 : this.state.touch.clientX - event.touches[0].clientX;
-                    const difY = this.state.touch.clientY === null ? 0 : this.state.touch.clientY - event.touches[0].clientY;
+                  if (event.type === "touchmove") {
+                    const difX =
+                      this.state.touch.clientX === null
+                        ? 0
+                        : this.state.touch.clientX - event.touches[0].clientX;
+                    const difY =
+                      this.state.touch.clientY === null
+                        ? 0
+                        : this.state.touch.clientY - event.touches[0].clientY;
 
                     event.movementX = difX;
                     event.movementY = difY;
@@ -412,32 +477,47 @@
             const screen = {};
             screen.minX = Math.round(-positionX / pixelSize) - 1;
             screen.minY = Math.round(-positionY / pixelSize) - 1;
-            screen.maxX = screen.minX + Math.round(this.sketch.width / scaled(pixelSize, false, customRounding)) + 1;
-            screen.maxY = screen.minY + Math.round(this.sketch.height / scaled(pixelSize, false, customRounding)) + 1;
+            screen.maxX =
+              screen.minX +
+              Math.round(
+                this.sketch.width / scaled(pixelSize, false, customRounding)
+              ) +
+              1;
+            screen.maxY =
+              screen.minY +
+              Math.round(
+                this.sketch.height / scaled(pixelSize, false, customRounding)
+              ) +
+              1;
 
-            for(const pixel in pixels) {
+            for (const pixel in pixels) {
               const color = pixels[pixel];
-              const pixelData = pixel.split('_');
+              const pixelData = pixel.split("_");
               const pX = +pixelData[0];
               const pY = +pixelData[1];
 
-              if(pX < screen.minX || pY < screen.minY || pX > screen.maxX || pY > screen.maxY) {
+              if (
+                pX < screen.minX ||
+                pY < screen.minY ||
+                pX > screen.maxX ||
+                pY > screen.maxY
+              ) {
                 continue;
               }
 
-              if(!render[color]) {
+              if (!render[color]) {
                 render[color] = {};
               }
-            
+
               render[color][`${pX}_${pY}`] = true;
             }
 
             const banList = {};
 
-            for(const hex in render) {
+            for (const hex in render) {
               this.sketch.fill(hex);
-              for(const pos in render[hex]) {
-                if(banList[pos]) {
+              for (const pos in render[hex]) {
+                if (banList[pos]) {
                   continue;
                 }
 
@@ -450,28 +530,27 @@
                 let posXTmp;
 
                 posXTmp = posX + 1;
-                while(render[hex][`${posXTmp}_${posY}`]) {
+                while (render[hex][`${posXTmp}_${posY}`]) {
                   banList[`${posXTmp}_${posY}`] = true;
                   widthPlus++;
                   posXTmp++;
                 }
 
                 posXTmp = posX - 1;
-                while(render[hex][`${posXTmp}_${posY}`]) {
+                while (render[hex][`${posXTmp}_${posY}`]) {
                   banList[`${posXTmp}_${posY}`] = true;
-                  widthPlus++;
+                  widthMinus++;
                   posXTmp--;
                 }
 
                 this.sketch.rect(
-                    scaled(positionX + (posX-widthMinus) * pixelSize),
-                    scaled(positionY + posY * pixelSize),
-                    scaled(pixelSize) * (1+widthPlus+widthMinus),
-                    scaled(pixelSize)
-                  );
+                  scaled(positionX + (posX - widthMinus) * pixelSize),
+                  scaled(positionY + posY * pixelSize),
+                  scaled(pixelSize) * (1 + widthPlus + widthMinus),
+                  scaled(pixelSize)
+                );
               }
             }
-
           },
           renderCursor() {
             this.sketch.noStroke();
