@@ -151,6 +151,9 @@
               }
             } catch (err) {
               console.error(err);
+              if(err.message === 'Too many requests') {
+                err.message = 'You can only paint 60 pixels per minute. Wait a little.';
+              }
               alert(err.message);
             } finally {
               this.state.isColoring = false;
