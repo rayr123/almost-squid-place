@@ -61,8 +61,8 @@
             {
               scaleLevels: [0.1, 0.2, 0.5, 1, 2, 3, 4, 5, 7, 9, 10],
 
-              pixelsX: 100,
-              pixelsY: 50,
+              pixelsX: 500,
+              pixelsY: 500,
 
               colors: ["#f02e65", "#ffffff", "#000000"],
 
@@ -316,8 +316,6 @@
                     event.movementY < 0 ? Math.floor : Math.ceil
                   );
 
-                  // TODO: Support touch for mobile
-
                   if (
                     this.state.debounce === null ||
                     this.state.debounce < Date.now() - 1
@@ -332,16 +330,28 @@
             }, 1);
           },
 
+          repositionZoom(fromIndex, toIndex) {
+            // TODO: Reposition zoom to middle using positionX and this.sketch.width
+          },
+
           zoomOut() {
+            const currentLevel = this.state.scaleLevel;
             this.state.scaleLevel = Math.max(this.state.scaleLevel - 1, 0);
+
+            this.repositionZoom(currentLevel, this.state.scaleLevel);
+
             this.render();
           },
 
           zoomIn() {
+            const currentLevel = this.state.scaleLevel;
             this.state.scaleLevel = Math.min(
               this.state.scaleLevel + 1,
               this.config.scaleLevels.length - 1
             );
+
+            this.repositionZoom(currentLevel, this.state.scaleLevel);
+
             this.render();
           },
 
@@ -396,20 +406,72 @@
               pixelSize,
             } = this.config;
 
-            for (let x = 0; x < pixelsX; x++) {
-              for (let y = 0; y < pixelsY; y++) {
-                const color = pixels[`${x}_${y}`] || null;
-                if (color) {
-                  this.sketch.fill(color);
-                  this.sketch.rect(
-                    scaled(positionX + x * pixelSize),
-                    scaled(positionY + y * pixelSize),
-                    scaled(pixelSize),
+            const render = {};
+
+            const customRounding = (t) => t;
+            const screen = {};
+            screen.minX = Math.round(-positionX / pixelSize) - 1;
+            screen.minY = Math.round(-positionY / pixelSize) - 1;
+            screen.maxX = screen.minX + Math.round(this.sketch.width / scaled(pixelSize, false, customRounding)) + 1;
+            screen.maxY = screen.minY + Math.round(this.sketch.height / scaled(pixelSize, false, customRounding)) + 1;
+
+            for(const pixel in pixels) {
+              const color = pixels[pixel];
+              const pixelData = pixel.split('_');
+              const pX = +pixelData[0];
+              const pY = +pixelData[1];
+
+              if(pX < screen.minX || pY < screen.minY || pX > screen.maxX || pY > screen.maxY) {
+                continue;
+              }
+
+              if(!render[color]) {
+                render[color] = {};
+              }
+            
+              render[color][`${pX}_${pY}`] = true;
+            }
+
+            const banList = {};
+
+            for(const hex in render) {
+              this.sketch.fill(hex);
+              for(const pos in render[hex]) {
+                if(banList[pos]) {
+                  continue;
+                }
+
+                const posArr = pos.split("_");
+                const posX = +posArr[0];
+                const posY = +posArr[1];
+
+                let widthPlus = 0;
+                let widthMinus = 0;
+                let posXTmp;
+
+                posXTmp = posX + 1;
+                while(render[hex][`${posXTmp}_${posY}`]) {
+                  banList[`${posXTmp}_${posY}`] = true;
+                  widthPlus++;
+                  posXTmp++;
+                }
+
+                posXTmp = posX - 1;
+                while(render[hex][`${posXTmp}_${posY}`]) {
+                  banList[`${posXTmp}_${posY}`] = true;
+                  widthPlus++;
+                  posXTmp--;
+                }
+
+                this.sketch.rect(
+                    scaled(positionX + (posX-widthMinus) * pixelSize),
+                    scaled(positionY + posY * pixelSize),
+                    scaled(pixelSize) * (1+widthPlus+widthMinus),
                     scaled(pixelSize)
                   );
-                }
               }
             }
+
           },
           renderCursor() {
             this.sketch.noStroke();
