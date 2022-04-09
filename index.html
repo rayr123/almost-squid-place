@@ -6,21 +6,45 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Almost Reddit Place</title>
 
-    <meta name="description" content="Reddit r/place canvas clone made customizable, open-sourced and self-hosted.">
+    <meta
+      name="description"
+      content="Reddit r/place canvas clone made customizable, open-sourced and self-hosted."
+    />
 
-    <meta name="twitter:card" content="summary_large_image">
-    <meta property="twitter:domain" content="reddit-place-clone-nine.vercel.app">
-    <meta property="twitter:url" content="https://reddit-place-clone-nine.vercel.app/">
-    <meta name="twitter:title" content="Almost Reddit Place">
-    <meta name="twitter:description" content="Reddit r/place canvas clone made customizable, open-sourced and self-hosted.">
-    <meta name="twitter:image" content="https://reddit-place-clone-nine.vercel.app/cover.png">
-    
-    <meta property="og:title" content="Almost Reddit Place">
-    <meta property="og:site_name" content="Almost Reddit Place">
-    <meta property="og:url" content="https://reddit-place-clone-nine.vercel.app/">
-    <meta property="og:description" content="Reddit r/place canvas clone made customizable, open-sourced and self-hosted.">
-    <meta property="og:type" content="website">
-    <meta property="og:image" content="https://reddit-place-clone-nine.vercel.app/cover.png">
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta
+      property="twitter:domain"
+      content="reddit-place-clone-nine.vercel.app"
+    />
+    <meta
+      property="twitter:url"
+      content="https://reddit-place-clone-nine.vercel.app/"
+    />
+    <meta name="twitter:title" content="Almost Reddit Place" />
+    <meta
+      name="twitter:description"
+      content="Reddit r/place canvas clone made customizable, open-sourced and self-hosted."
+    />
+    <meta
+      name="twitter:image"
+      content="https://reddit-place-clone-nine.vercel.app/cover.png"
+    />
+
+    <meta property="og:title" content="Almost Reddit Place" />
+    <meta property="og:site_name" content="Almost Reddit Place" />
+    <meta
+      property="og:url"
+      content="https://reddit-place-clone-nine.vercel.app/"
+    />
+    <meta
+      property="og:description"
+      content="Reddit r/place canvas clone made customizable, open-sourced and self-hosted."
+    />
+    <meta property="og:type" content="website" />
+    <meta
+      property="og:image"
+      content="https://reddit-place-clone-nine.vercel.app/cover.png"
+    />
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -52,6 +76,29 @@
     ></script>
 
     <script>
+      window.authModal = {
+        adapter: "appwrite",
+        config: {
+          endpoint: "https://appwrite.matejbaco.eu/v1",
+          projectId: "almostRedditPlace",
+        },
+
+        // If using Uauth
+        oauths: [],
+        oauthSuccessUrl: window.location.origin + "/",
+        oauthErrorUrl: window.location.origin + "/",
+
+        // If using Magic URL
+        magicUrlRedirect: window.location.origin + "/",
+
+        // If supporting password recovery
+        passwordRecoveryRedirect: window.location.origin + "/",
+      };
+    </script>
+    <!-- Auth Modal -->
+    <script src="/auth-modal.js" defer></script>
+
+    <script>
       // You can define variable here with configurations for the application
       /*
       var globalConfig = {
@@ -77,10 +124,25 @@
             {
               scaleLevels: [0.1, 0.2, 0.5, 1, 2, 3, 4, 5, 7, 9, 10],
 
+              delaySeconds: 10,
+
               pixelsX: 500,
               pixelsY: 500,
 
-              colors: ["#f02e65", "#ffffff", "#000000"],
+              colors: [
+                "#ff0000",
+                "#ff8700",
+                "#ffd300",
+                "#deff0a",
+                "#a1ff0a",
+                "#0aff99",
+                "#0aefff",
+                "#147df5",
+                "#580aff",
+                "#be0aff",
+                "#ffffff",
+                "#000000",
+              ],
 
               pixelSize: 10,
               pixelStokeSize: 1,
@@ -90,6 +152,10 @@
           ),
 
           state: {
+            cooldown: null,
+            interval: null,
+
+            currentPixelData: null,
             touch: {
               clientY: null,
               clientX: null,
@@ -102,7 +168,7 @@
 
             debounce: null,
 
-            selectedColor: "#f02e65",
+            selectedColor: "#ff0000",
 
             pixels: {},
           },
@@ -125,7 +191,7 @@
               try {
                 await appwrite.account.get();
               } catch (err) {
-                await appwrite.account.createAnonymousSession();
+                throw new Error("To place pixels, you must sign in.");
               }
 
               const res = await appwrite.functions.createExecution(
@@ -149,10 +215,25 @@
               if (!resJson.success && resJson.message) {
                 throw new Error(resJson.message);
               }
+
+              this.state.cooldown = this.config.delaySeconds;
+              if (this.state.interval) {
+                clearInterval(this.state.interval);
+              }
+              this.state.interval = setInterval(() => {
+                this.state.cooldown--;
+
+                if (this.state.cooldown <= 0) {
+                  if (this.state.interval) {
+                    clearInterval(this.state.interval);
+                  }
+                }
+              }, 1000);
             } catch (err) {
               console.error(err);
-              if(err.message === 'Too many requests') {
-                err.message = 'You can only paint 60 pixels per minute. Wait a little.';
+              if (err.message === "Too many requests") {
+                err.message =
+                  "You are too quick! You are not allowed to continue for a minute.";
               }
               alert(err.message);
             } finally {
@@ -202,6 +283,14 @@
             const currentPixelX = Math.floor(mousePosX / scaled(pixelSize));
             const currentPixelY = Math.floor(mousePosY / scaled(pixelSize));
 
+            const pixel =
+              this.state.pixels[`${currentPixelX}_${currentPixelY}`];
+            if (pixel) {
+              this.state.currentPixelData = pixel;
+            } else {
+              this.state.currentPixelData = null;
+            }
+
             const currentPixel = {
               x: currentPixelX,
               y: currentPixelY,
@@ -240,15 +329,14 @@
               documents.push(...response.documents);
               count = response.total;
             } while (documents.length < count);
-
             for (const document of documents) {
               if (!this.state.pixels[document.$id]) {
                 if (document.hex === "ffffff") {
                   if (this.state.pixels[document.$id]) {
-                    unset(this.state.pixels[document.$id]);
+                    delete this.state.pixels[document.$id];
                   }
                 } else {
-                  this.state.pixels[document.$id] = "#" + document.hex;
+                  this.state.pixels[document.$id] = document;
                 }
               }
             }
@@ -264,15 +352,15 @@
                   event.event === "database.documents.update" ||
                   event.event === "database.documents.create"
                 ) {
-                  if (event.payload === "ffffff") {
+                  if (event.payload.hex === "ffffff") {
                     if (this.state.pixels[event.payload.$id]) {
-                      unset(this.state.pixels[event.payload.$id]);
+                      delete this.state.pixels[event.payload.$id];
                     }
                   } else {
-                    this.state.pixels[event.payload.$id] =
-                      "#" + event.payload.hex;
-                    this.render();
+                    this.state.pixels[event.payload.$id] = event.payload;
                   }
+
+                  this.render();
                 }
               }
             );
@@ -380,8 +468,8 @@
                         ? 0
                         : this.state.touch.clientY - event.touches[0].clientY;
 
-                    event.movementX = difX;
-                    event.movementY = difY;
+                    event.movementX = -difX;
+                    event.movementY = -difY;
 
                     this.state.touch.clientX = event.touches[0].clientX;
                     this.state.touch.clientY = event.touches[0].clientY;
@@ -475,6 +563,23 @@
             );
           },
 
+          printDate(date) {
+            if (!date) {
+              return "No date";
+            }
+
+            const d = new Date(date);
+
+            const min =
+              d.getMinutes() < 10 ? "0" + d.getMinutes() : d.getMinutes();
+            const hour = d.getHours() < 10 ? "0" + d.getHours() : d.getHours();
+            const day = d.getDate() < 10 ? "0" + d.getDate() : d.getDate();
+            let m = d.getMonth() + 1;
+            const month = m < 10 ? "0" + m : m;
+
+            return `${day}.${month} at ${hour}:${min}`;
+          },
+
           renderPixels() {
             this.sketch.noStroke();
 
@@ -510,7 +615,7 @@
               1;
 
             for (const pixel in pixels) {
-              const color = pixels[pixel];
+              const color = pixels[pixel].hex;
               const pixelData = pixel.split("_");
               const pX = +pixelData[0];
               const pY = +pixelData[1];
@@ -534,7 +639,7 @@
             const banList = {};
 
             for (const hex in render) {
-              this.sketch.fill(hex);
+              this.sketch.fill("#" + hex);
               for (const pos in render[hex]) {
                 if (banList[pos]) {
                   continue;
@@ -652,18 +757,22 @@
     </script>
   </head>
   <body>
-    <a href="https://github.com/Meldiron/reddit-place-clone">
+    <a
+      class="hidden md:block"
+      href="https://github.com/Meldiron/reddit-place-clone"
+    >
       <img
         alt="Fork me on GitHub"
         data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_right_darkblue_121621.png"
         src="https://camo.githubusercontent.com/38ef81f8aca64bb9a64448d0d70f1308ef5341ab/68747470733a2f2f73332e616d617a6f6e6177732e636f6d2f6769746875622f726962626f6e732f666f726b6d655f72696768745f6461726b626c75655f3132313632312e706e67"
-        style="position: absolute; top: 0; right: 0; border: 0; z-index: 100;"
+        style="position: absolute; top: 0; right: 0; border: 0; z-index: 100"
       />
     </a>
 
     <div x-data="app">
       <!-- 'Made with Appwrite' badge -->
       <a
+        class="hidden md:block"
         href="https://appwrite.io/"
         target="_blank"
         style="position: fixed; right: 18px; bottom: 18px; z-index: 999"
@@ -725,7 +834,22 @@
             </template>
           </div>
 
-          <div class="container bg-white rounded-xl overflow-hidden">
+          <div class="container bg-white rounded-xl overflow-hidden relative">
+            <template x-if="state.currentPixelData">
+              <div
+                class="absolute -space-y-1 flex-col z-10 bottom-4 left-0 w-full flex items-center justify-center"
+              >
+                <div
+                  x-text="printDate(state.currentPixelData.createdAt)"
+                  class="p-1 px-2 text-xs rounded-b-none text-slate-200 bg-slate-500 rounded-lg"
+                ></div>
+                <div
+                  x-text="state.currentPixelData.userId"
+                  class="p-3 text-slate-500 bg-slate-900 rounded-lg"
+                ></div>
+              </div>
+            </template>
+
             <div class="relative">
               <div class="absolute top-4 right-4 flex flex-col space-y-4">
                 <button
@@ -815,37 +939,80 @@
               </template>
             </div>
 
-            <div class="col-span-12 md:col-span-4">
-              <button
-                x-on:click="onColorPixel()"
-                class="flex items-center justify-center space-x-3 text-white bg-[#f02e65] w-full rounded-xl py-3 px-9"
-              >
-                <p>Color Pixel</p>
-
-                <template hidden x-if="state.isColoring">
-                  <svg
-                    class="w-4 h-4 animate-spin text-white"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
+            <template
+              hidden
+              x-data="{loaded: false}"
+              x-init="setTimeout(() => { loaded = true }, 1)"
+              x-if="loaded"
+            >
+              <div class="col-span-12 md:col-span-4">
+                <template hidden x-if="$store.authModal.accountProfile">
+                  <button
+                    x-on:click="onColorPixel()"
+                    x-bind:class="state.cooldown <= 0 ? 'bg-[#f02e65]' : 'bg-orange-400 opacity-50'"
+                    class="flex items-center justify-center space-x-3 text-white bg-[#f02e65] w-full rounded-xl py-3 px-9"
                   >
-                    <circle
-                      class="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      stroke-width="4"
-                    ></circle>
-                    <path
-                      class="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    ></path>
-                  </svg>
+                    <template x-if="state.cooldown <= 0"><p>Color Pixel</p></template>
+                    <template x-if="state.cooldown > 0"><p x-text="'Color in ' + state.cooldown + (state.cooldown <= 1 ? ' second' : ' seconds')"></p></template>
+
+                    <template hidden x-if="state.isColoring">
+                      <svg
+                        class="w-4 h-4 animate-spin text-white"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle
+                          class="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          stroke-width="4"
+                        ></circle>
+                        <path
+                          class="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        ></path>
+                      </svg>
+                    </template>
+                  </button>
                 </template>
-              </button>
-            </div>
+
+                <template hidden x-if="!$store.authModal.accountProfile">
+                  <button
+                    x-on:click="$store.authModal.open()"
+                    class="flex items-center justify-center space-x-3 text-white bg-[#f02e65] w-full rounded-xl py-3 px-9"
+                  >
+                    <p>Sign in to Color</p>
+
+                    <template hidden x-if="state.isColoring">
+                      <svg
+                        class="w-4 h-4 animate-spin text-white"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle
+                          class="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          stroke-width="4"
+                        ></circle>
+                        <path
+                          class="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        ></path>
+                      </svg>
+                    </template>
+                  </button>
+                </template>
+              </div>
+            </template>
           </div>
         </div>
       </div>

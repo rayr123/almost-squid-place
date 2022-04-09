@@ -13,22 +13,22 @@
             "permission": "collection",
             "attributes": [
                 {
-                    "key": "x",
-                    "type": "integer",
-                    "status": "available",
-                    "required": true,
-                    "array": false,
-                    "min": null,
-                    "max": null,
-                    "default": null
-                },
-                {
                     "key": "userId",
                     "type": "string",
                     "status": "available",
                     "required": true,
                     "array": false,
                     "size": 255,
+                    "default": null
+                },
+                {
+                    "key": "createdAt",
+                    "type": "integer",
+                    "status": "available",
+                    "required": false,
+                    "array": false,
+                    "min": null,
+                    "max": null,
                     "default": null
                 },
                 {
@@ -51,10 +51,10 @@
                     "default": null
                 },
                 {
-                    "key": "createdAt",
+                    "key": "x",
                     "type": "integer",
                     "status": "available",
-                    "required": false,
+                    "required": true,
                     "array": false,
                     "min": null,
                     "max": null,
@@ -76,6 +76,79 @@
                     ]
                 }
             ]
+        },
+        {
+            "$id": "pixelsHistory",
+            "$read": [],
+            "$write": [],
+            "name": "pixelsHistory",
+            "enabled": true,
+            "permission": "collection",
+            "attributes": [
+                {
+                    "key": "userId",
+                    "type": "string",
+                    "status": "available",
+                    "required": true,
+                    "array": false,
+                    "size": 255,
+                    "default": null
+                },
+                {
+                    "key": "createdAt",
+                    "type": "integer",
+                    "status": "available",
+                    "required": true,
+                    "array": false,
+                    "min": null,
+                    "max": null,
+                    "default": null
+                },
+                {
+                    "key": "x",
+                    "type": "integer",
+                    "status": "available",
+                    "required": true,
+                    "array": false,
+                    "min": null,
+                    "max": null,
+                    "default": null
+                },
+                {
+                    "key": "y",
+                    "type": "integer",
+                    "status": "available",
+                    "required": true,
+                    "array": false,
+                    "min": null,
+                    "max": null,
+                    "default": null
+                },
+                {
+                    "key": "hex",
+                    "type": "string",
+                    "status": "available",
+                    "required": true,
+                    "array": false,
+                    "size": 6,
+                    "default": null
+                }
+            ],
+            "indexes": [
+                {
+                    "key": "userDateIndex",
+                    "type": "key",
+                    "status": "available",
+                    "attributes": [
+                        "userId",
+                        "createdAt"
+                    ],
+                    "orders": [
+                        "ASC",
+                        "ASC"
+                    ]
+                }
+            ]
         }
     ],
     "functions": [
@@ -85,7 +158,9 @@
             "runtime": "deno-1.14",
             "path": "functions/colorPixel",
             "entrypoint": "src/mod.ts",
-            "execute": ["role:member"],
+            "execute": [
+                "role:member"
+            ],
             "events": [],
             "schedule": "",
             "timeout": 15
