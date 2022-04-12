@@ -387,6 +387,8 @@
                 sketch.draw = () => {};
 
                 sketch.keyPressed = (event) => {
+                  // Disabled because it causes trouble in modal inputs
+                  /*
                   if (event.key === " ") {
                     this.onColorPixel();
                     return;
@@ -443,6 +445,7 @@
                   if (moveX !== 0 || moveY !== 0) {
                     this.render();
                   }
+                  */
                 };
 
                 sketch.mouseReleased = (event) => {
