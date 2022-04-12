@@ -728,6 +728,8 @@ for(const file of files) {
   var params = Object.fromEntries(urlSearchParams.entries());
 
   if (params.userId && params.secret) {
+    window.history.pushState({}, document.title, window.location.pathname);
+    
     if (params.type === 'magicUrl') {
       // Magic URL functionality
       var storeSnapshot = Alpine.store("authModal");
