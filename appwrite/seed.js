@@ -34,6 +34,22 @@ require("dotenv").config();
     count = documents.length;
   } while (count > 0);
 
+  count = 1;
+  do {
+    const { documents } = await database.listDocuments(
+      "pixelsHistory",
+      [],
+      100,
+      0
+    );
+
+    for (const document of documents) {
+      await database.deleteDocument("pixelsHistory", document.$id);
+    }
+
+    count = documents.length;
+  } while (count > 0);
+
   const pixels = JSON.parse(fs.readFileSync("pixels.json").toString());
 
   for (const pixelId in pixels) {
@@ -45,6 +61,14 @@ require("dotenv").config();
       x,
       y,
       hex: hex.split("#").join(""),
+    });
+
+    await database.createDocument("pixelsHistory", pixelId, {
+      userId: "appwriteOfficial",
+      x,
+      y,
+      hex: hex.split("#").join(""),
+      createdAt: Date.now()
     });
   }
 
