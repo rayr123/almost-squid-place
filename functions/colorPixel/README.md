@@ -4,23 +4,42 @@ Welcome to the documentation of this function 👋 We strongly recommend keeping
 
 ## 🤖 Documentation
 
-Simple function similar to typical "hello world" example, but instead, we return a simple JSON that tells everyone how awesome developers are.
+A method used by clients to color a pixel. This is used instead of directly inserting into database in order to have full control over allowed colors and delay between palcing pixels.
 
-<!-- Update with your description, for example 'Create Stripe payment and return payment URL' -->
+Function supports admin accounts. If an user is admin, delay check is skipped.
 
 _Example input:_
 
-This function expects no input
-
-<!-- If input is expected, add example -->
-
-_Example output:_
-
-<!-- Update with your expected output -->
+This function expects JSON input:
 
 ```json
 {
- "areDevelopersAwesome": true
+    "x": 12,
+    "y": 1,
+    "hex": "#000000"
+}
+```
+
+_Example output:_
+
+This function returns JSON response:
+
+**Success**:
+
+```json
+{
+    "success": true,
+    "skipDelay": false
+}
+```
+
+**Failure**:
+
+```json
+
+{
+    "success": false,
+    "message": "You can only color pixel every 10 seconds."
 }
 ```
 
@@ -30,7 +49,10 @@ List of environment variables used by this cloud function:
 
 - **APPWRITE_FUNCTION_ENDPOINT** - Endpoint of Appwrite project
 - **APPWRITE_FUNCTION_API_KEY** - Appwrite API Key
-<!-- Add your custom environment variables -->
+- **ALLOWED_COLORS** - Allowed colors separated by comma, for example `ff0000,ff8700,ffd300`
+- **DELAY_SECONDS** - Delay for a user between painting pixels, for example `10`
+- **ADMIN_USERS** - Admin IDs separated by comma, for example `matejbaco2000,matej,christy`
+
 
 ## 🚀 Deployment
 
