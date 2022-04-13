@@ -1,7 +1,5 @@
 # Almost Reddit Place
 
-> README file will be written once the project is finished.
-
 ![Cover](cover.png)
 
 Almost Reddit Place is r/place canvas clone made with Appwrite, Alpine.js and TailwindCSS. I decided to create this project to showcase what Appwrite is capable of, and learn how to work with canvas on website.
