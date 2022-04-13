@@ -526,6 +526,36 @@
             this.state.showInfoAlert = !this.state.showInfoAlert;
           },
 
+          exportScreenshot() {
+            const s = (sketch) => {
+              sketch.setup = () => {
+                const { pixels } = this.state;
+                const { pixelsX, pixelsY } = this.config;
+
+                const canvas = sketch.createCanvas(pixelsX, pixelsY);
+
+                const clrBackground = sketch.color("#ffffff");
+                for (let x = 0; x < pixelsX; x++) {
+                  for (let y = 0; y < pixelsY; y++) {
+                    sketch.set(x, y, clrBackground);
+                  }
+                }
+
+                for (const pixel in pixels) {
+                  const pixelData = pixels[pixel];
+                  const clr = sketch.color("#" + pixelData.hex);
+                  sketch.set(pixelData.x, pixelData.y, clr);
+                }
+
+                sketch.updatePixels();
+
+                sketch.saveCanvas(canvas, "myCanvas", "jpg");
+              };
+            };
+
+            const p5Screenshot = new p5(s);
+          },
+
           zoomOut() {
             const currentLevel = this.state.scaleLevel;
             this.state.scaleLevel = Math.max(this.state.scaleLevel - 1, 0);
