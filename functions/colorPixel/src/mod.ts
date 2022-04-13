@@ -20,16 +20,14 @@ export default async function (req: any, res: any) {
 
   // Validate position
   if (!payload.x || !payload.y) {
-    return res.json({
-      success: false,
-      message: "Please select location.",
-    });
+    payload.x = 0;
+    payload.y = 0;
   }
 
   payload.x = +payload.x;
   payload.y = +payload.y;
 
-  if (!payload.x || !payload.y) {
+  if (isNaN(payload.x) || isNaN(payload.y)) {
     return res.json({
       success: false,
       message: "Please select valid location.",
