@@ -18,6 +18,7 @@ export default async function (req: any, res: any) {
 
   const payload = JSON.parse(req.payload || "{}");
 
+  // Validate position
   if (!payload.x || !payload.y) {
     return res.json({
       success: false,
@@ -35,6 +36,11 @@ export default async function (req: any, res: any) {
     });
   }
 
+  // Check for admin permissions
+  const adminUsers = req.env.ADMIN_USERS.split(",");
+  const isAdmin = adminUsers.includes(req.env["APPWRITE_FUNCTION_USER_ID"]);
+
+  // Validate color
   const allowedColors = req.env.ALLOWED_COLORS.split(",");
 
   if (!payload.hex) {
@@ -43,13 +49,14 @@ export default async function (req: any, res: any) {
     payload.hex = payload.hex.split("#").join("");
   }
 
-  if(!allowedColors.includes(payload.hex)) {
+  if (!allowedColors.includes(payload.hex)) {
     return res.json({
       success: false,
       message: "Please select valid color.",
     });
   }
 
+  // Paint pixel
   const pixelId = `${payload.x}_${payload.y}`;
 
   let database = new sdk.Database(client);
@@ -61,16 +68,25 @@ export default async function (req: any, res: any) {
 
   const date = Date.now();
 
-  const history = await database.listDocuments('pixelsHistory', [
-    `userId.equal('${req.env["APPWRITE_FUNCTION_USER_ID"]}')`,
-    `createdAt.greater(${date - req.env.DELAY_SECONDS*1000})`,
-  ], 1);
+  if (!isAdmin) {
+    const history = await database.listDocuments(
+      "pixelsHistory",
+      [
+        `userId.equal('${req.env["APPWRITE_FUNCTION_USER_ID"]}')`,
+        `createdAt.greater(${date - req.env.DELAY_SECONDS * 1000})`,
+      ],
+      1
+    );
 
-  if(history.documents.length > 0) {
-    return res.json({
-      success: false,
-      message: "You can only color pixel every " + req.env.DELAY_SECONDS + " seconds.",
-    });
+    if (history.documents.length > 0) {
+      return res.json({
+        success: false,
+        message:
+          "You can only color pixel every " +
+          req.env.DELAY_SECONDS +
+          " seconds.",
+      });
+    }
   }
 
   try {
@@ -90,7 +106,7 @@ export default async function (req: any, res: any) {
     });
   }
 
-  await database.createDocument("pixelsHistory", 'unique()', {
+  await database.createDocument("pixelsHistory", "unique()", {
     hex: payload.hex,
     userId: req.env["APPWRITE_FUNCTION_USER_ID"],
     createdAt: date,
@@ -100,5 +116,6 @@ export default async function (req: any, res: any) {
 
   return res.json({
     success: true,
+    skipDelay: isAdmin,
   });
 }

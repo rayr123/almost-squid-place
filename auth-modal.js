@@ -679,7 +679,9 @@ for(const file of files) {
       this.opened = false;
 
       if (reset) {
-        this.goTo("signIn");
+        setTimeout(() => {
+          this.goTo("signIn");
+        }, 500);
       }
     },
 
@@ -693,8 +695,17 @@ for(const file of files) {
 
   // Insert Auth Modal
   var authModal = `
-  <template x-if="$store.authModal.opened">
-    <div class="fixed z-[9999] inset-0" style="font-family: 'Montserrat', sans-serif;">
+    <div
+      class="fixed z-[9999] inset-0"
+      style="font-family: 'Montserrat', sans-serif;"
+      x-show="$store.authModal.opened"
+      x-transition:enter="transition ease-out duration-300"
+      x-transition:enter-start="opacity-0"
+      x-transition:enter-end="opacity-100"
+      x-transition:leave="transition ease-in duration-300"
+      x-transition:leave-start="opacity-100"
+      x-transition:leave-end="opacity-0"
+    >
       <div class="w-full h-full relative">
         <div class="absolute inset-0 bg-black opacity-50" x-on:click="$store.authModal.close()"></div>
         <div class="relative w-full h-full pt-10 overflow-y-auto pb-10" x-on:click="$store.authModal.close()">
@@ -714,7 +725,6 @@ for(const file of files) {
         </div>
       </div>
     </div>
-  </template>
     `;
 
   document.body.insertAdjacentHTML("beforeend", authModal);

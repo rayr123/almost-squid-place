@@ -66,7 +66,7 @@
     </style>
 
     <script src="https://cdn.jsdelivr.net/npm/appwrite@7.0.0"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
     <script src="//unpkg.com/alpinejs" defer></script>
     <script
       src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.1/p5.min.js"
@@ -152,10 +152,14 @@
           ),
 
           state: {
+            showInfoAlert: false,
+
             cooldown: null,
             interval: null,
 
             currentPixelData: null,
+            currentPixelShow: false,
+
             touch: {
               clientY: null,
               clientX: null,
@@ -216,19 +220,26 @@
                 throw new Error(resJson.message);
               }
 
-              this.state.cooldown = this.config.delaySeconds;
-              if (this.state.interval) {
-                clearInterval(this.state.interval);
-              }
-              this.state.interval = setInterval(() => {
-                this.state.cooldown--;
-
-                if (this.state.cooldown <= 0) {
-                  if (this.state.interval) {
-                    clearInterval(this.state.interval);
-                  }
+              if (resJson.skipDelay) {
+                this.state.cooldown = 0;
+                if (this.state.interval) {
+                  clearInterval(this.state.interval);
                 }
-              }, 1000);
+              } else {
+                this.state.cooldown = this.config.delaySeconds;
+                if (this.state.interval) {
+                  clearInterval(this.state.interval);
+                }
+                this.state.interval = setInterval(() => {
+                  this.state.cooldown--;
+
+                  if (this.state.cooldown <= 0) {
+                    if (this.state.interval) {
+                      clearInterval(this.state.interval);
+                    }
+                  }
+                }, 1000);
+              }
             } catch (err) {
               console.error(err);
               if (err.message === "Too many requests") {
@@ -287,8 +298,10 @@
               this.state.pixels[`${currentPixelX}_${currentPixelY}`];
             if (pixel) {
               this.state.currentPixelData = pixel;
+              this.state.currentPixelShow = true;
             } else {
-              this.state.currentPixelData = null;
+              // this.state.currentPixelData = null;
+              this.state.currentPixelShow = false;
             }
 
             const currentPixel = {
@@ -387,8 +400,13 @@
                 sketch.draw = () => {};
 
                 sketch.keyPressed = (event) => {
-                  // Disabled because it causes trouble in modal inputs
-                  /*
+                  if (
+                    event.target.nodeName.toLowerCase() !== "canvas" &&
+                    event.target.nodeName.toLowerCase() !== "body"
+                  ) {
+                    return;
+                  }
+
                   if (event.key === " ") {
                     this.onColorPixel();
                     return;
@@ -445,7 +463,6 @@
                   if (moveX !== 0 || moveY !== 0) {
                     this.render();
                   }
-                  */
                 };
 
                 sketch.mouseReleased = (event) => {
@@ -507,6 +524,10 @@
 
           repositionZoom(fromIndex, toIndex) {
             // TODO: Reposition zoom to middle using positionX and this.sketch.width
+          },
+
+          toggleInfo() {
+            this.state.showInfoAlert = !this.state.showInfoAlert;
           },
 
           zoomOut() {
@@ -837,23 +858,50 @@
             </template>
           </div>
 
-          <div class="container bg-white rounded-xl overflow-hidden relative">
-            <template x-if="state.currentPixelData">
+          <div
+            class="touch-manipulation container bg-white rounded-xl overflow-hidden relative"
+          >
+            <div
+              x-show="state.currentPixelShow"
+              x-transition:enter="transition ease-out duration-300"
+              x-transition:enter-start="opacity-0 scale-90"
+              x-transition:enter-end="opacity-100 scale-100"
+              x-transition:leave="transition ease-in duration-300"
+              x-transition:leave-start="opacity-100 scale-100"
+              x-transition:leave-end="opacity-0 scale-90"
+              class="pointer-events-none absolute -space-y-1 flex-col z-10 bottom-4 left-0 w-full flex items-center justify-center"
+            >
               <div
-                class="absolute -space-y-1 flex-col z-10 bottom-4 left-0 w-full flex items-center justify-center"
-              >
-                <div
-                  x-text="printDate(state.currentPixelData.createdAt)"
-                  class="p-1 px-2 text-xs text-slate-200 bg-slate-500 rounded-lg"
-                ></div>
-                <div
-                  x-text="state.currentPixelData.userId"
-                  class="p-2 text-sm text-slate-500 bg-slate-900 rounded-lg"
-                ></div>
-              </div>
-            </template>
+                x-text="state.currentPixelData ? printDate(state.currentPixelData.createdAt) : ''"
+                class="p-1 px-2 text-xs text-slate-200 bg-slate-500 rounded-lg"
+              ></div>
+              <div
+                x-text="state.currentPixelData ? state.currentPixelData.userId : ''"
+                class="p-2 text-sm text-slate-500 bg-slate-900 rounded-lg"
+              ></div>
+            </div>
 
             <div class="relative">
+              <div class="absolute top-4 left-4 flex flex-col space-y-4">
+                <button
+                  x-on:click="toggleInfo()"
+                  class="p-3 rounded-full bg-red-100 text-red-600 hover:bg-red-200"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="h-5 w-5"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                  >
+                    <path
+                      fill-rule="evenodd"
+                      d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                      clip-rule="evenodd"
+                    />
+                  </svg>
+                </button>
+              </div>
+
               <div class="absolute top-4 right-4 flex flex-col space-y-4">
                 <button
                   x-on:click="zoomIn()"
@@ -955,8 +1003,14 @@
                     x-bind:class="state.cooldown <= 0 ? 'bg-[#f02e65]' : 'bg-orange-400 opacity-50'"
                     class="flex items-center justify-center space-x-3 text-white bg-[#f02e65] w-full rounded-xl py-3 px-9"
                   >
-                    <template x-if="state.cooldown <= 0"><p>Color Pixel</p></template>
-                    <template x-if="state.cooldown > 0"><p x-text="'Color in ' + state.cooldown + (state.cooldown <= 1 ? ' second' : ' seconds')"></p></template>
+                    <template x-if="state.cooldown <= 0"
+                      ><p>Color Pixel</p></template
+                    >
+                    <template x-if="state.cooldown > 0"
+                      ><p
+                        x-text="'Color in ' + state.cooldown + (state.cooldown <= 1 ? ' second' : ' seconds')"
+                      ></p
+                    ></template>
 
                     <template hidden x-if="state.isColoring">
                       <svg
@@ -1016,6 +1070,69 @@
                 </template>
               </div>
             </template>
+          </div>
+        </div>
+      </div>
+
+      <div
+        x-show="state.showInfoAlert"
+        x-transition:enter="transition ease-out duration-300"
+        x-transition:enter-start="opacity-0"
+        x-transition:enter-end="opacity-100"
+        x-transition:leave="transition ease-in duration-300"
+        x-transition:leave-start="opacity-100"
+        x-transition:leave-end="opacity-0"
+        class="fixed z-[9999] inset-0"
+        style="display: none; font-family: 'Montserrat', sans-serif"
+      >
+        <div class="w-full h-full relative">
+          <div
+            class="absolute inset-0 bg-black opacity-50"
+            x-on:click="toggleInfo()"
+          ></div>
+          <div
+            class="relative w-full h-full pt-10 overflow-y-auto pb-10"
+            x-on:click="toggleInfo()"
+          >
+            <div
+              class="mx-auto w-full max-w-2xl rounded-xl bg-white p-6"
+              x-on:click="$event.stopPropagation()"
+            >
+              <div class="flex justify-between items-center">
+                <h1 class="text-auth-gray-900 mb-4 text-2xl font-bold">
+                  Getting Started
+                </h1>
+                <button
+                  type="button"
+                  x-on:click="toggleInfo()"
+                  class="p-3 transition-colors duration-200 transform rounded-md hover:bg-opacity-25 hover:bg-gray-600 focus:outline-none"
+                >
+                  <svg
+                    class="w-5 h-5"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      d="M6 18L18 6M6 6L18 18"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    ></path>
+                  </svg>
+                </button>
+              </div>
+              <div class="mt-6 prose">
+                <p>Welcome to Almost Reddit Place 👋</p>
+
+                <p>I decided to create this project to showcase what <a href="https://appwrite.io/docs/installation" class="text-[#f02e65]">Appwrite</a> is capable of and learn how to work with canvas on a website. I took the idea from Reddit Place, where the Reddit team added a minigame similar to this one for a few weeks after April Fools' Day 🤪</p>
+
+                <p>In this game, anyone can color 1 pixel of 2000x2000 canvas every 10 seconds. There is a palette of colors you can pick from to create your masterpiece. If you want to work on a big painting, feel free to invite your friends to help you 🖼️</p>
+                
+                <i class="italic">Fun fact: Appwrite implementation took less than 2 hours!</i>
+              </div>
+            </div>
           </div>
         </div>
       </div>
