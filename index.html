@@ -533,6 +533,7 @@
                 const { pixelsX, pixelsY } = this.config;
 
                 const canvas = sketch.createCanvas(pixelsX, pixelsY);
+                sketch.pixelDensity(1);
 
                 const clrBackground = sketch.color("#ffffff");
                 for (let x = 0; x < pixelsX; x++) {
@@ -549,7 +550,7 @@
 
                 sketch.updatePixels();
 
-                sketch.saveCanvas(canvas, "myCanvas", "jpg");
+                sketch.saveCanvas(canvas, "myCanvas", "png");
               };
             };
 
