@@ -468,12 +468,12 @@
                 };
 
                 sketch.mouseDragged = (event) => {
-                  event.stopPropagation();
-                  event.preventDefault();
-
                   if (event.target.nodeName.toLowerCase() !== "canvas") {
                     return;
                   }
+
+                  event.stopPropagation();
+                  event.preventDefault();
 
                   if (event.type === "touchmove") {
                     const difX =
