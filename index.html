@@ -321,10 +321,62 @@
             return currentPixel;
           },
 
-          async fetchPixels() {
+          async fetchUsingStorage() {
             documents = [];
-            let cursor = undefined;
 
+            const fileRes = await appwrite.storage.listFiles(
+              "pixels",
+              undefined,
+              1,
+              undefined,
+              undefined,
+              undefined,
+              "DESC"
+            );
+
+            const fileUrl = appwrite.storage.getFileDownload(
+              "pixels",
+              fileRes.files[0].$id
+            );
+
+            const json = await (await fetch(fileUrl.href)).json();
+
+            documents.push(...json.docs);
+
+            let cursor = undefined;
+            hasNext = true;
+            do {
+              const response = await appwrite.database.listDocuments(
+                "pixelsPublic",
+                [
+                  "x.lesserEqual(" + this.config.pixelsX + ")",
+                  "x.greaterEqual(0)",
+                  "y.lesserEqual(" + this.config.pixelsY + ")",
+                  "y.greaterEqual(0)",
+                  "createdAt.greater(" + json.syncAt + ")",
+                ],
+                100,
+                undefined,
+                cursor,
+                "after"
+              );
+
+              documents.push(...response.documents);
+
+              if (response.documents.length > 0) {
+                cursor = response.documents[response.documents.length - 1].$id;
+              } else {
+                hasNext = false;
+              }
+            } while (hasNext);
+
+            return documents;
+          },
+
+          async fetchUsingDatabase() {
+            documents = [];
+
+            let cursor = undefined;
             hasNext = true;
             do {
               const response = await appwrite.database.listDocuments(
@@ -349,6 +401,20 @@
                 hasNext = false;
               }
             } while (hasNext);
+
+            return documents;
+          },
+
+          async fetchPixels() {
+            documents = [];
+
+            try {
+              documents = await this.fetchUsingStorage();
+            } catch (err) {
+              console.error(err);
+
+              documents = await this.fetchUsingDatabase();
+            }
 
             for (const document of documents) {
               if (!this.state.pixels[document.$id]) {
@@ -870,10 +936,6 @@
               </svg>
             </template>
           </div>
-
-          <template hidden x-if="!state.isReady">
-            <p class="text-white">Initial load can take up to a minute.</p>
-          </template>
 
           <div
             class="mt-4 touch-manipulation container bg-white rounded-xl overflow-hidden relative"

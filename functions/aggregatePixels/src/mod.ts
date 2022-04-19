@@ -62,7 +62,10 @@ export default async function (req: any, res: any) {
   } while (hasNext);
 
   const filePath = "out.json";
-  await Deno.writeTextFile(filePath, JSON.stringify(documents));
+  await Deno.writeTextFile(filePath, JSON.stringify({
+    syncAt: Date.now(),
+    docs: documents
+  }));
 
   const newFile = await storage.createFile("pixels", 'unique()', filePath);
 
