@@ -23,6 +23,8 @@ That's it 🥳 Your canvas will be empty. If you want to fill upper left corner 
 
 Seeding script can take up to a few minutes to finish, please be patient. Once finished, Appwrite logo will be added onto you canvas.
 
+Also make sure to create `pixels` storage and set bucket-level permissions to read=`role:all`, leave write empty.
+
 ## 🤖 Running Website
 
 Website uses [TailwindCSS](https://tailwindcss.com/) and [Alpine.js](https://alpinejs.dev/), meaning it is pure HTML, CSS and JS code. To run website, you can upload file from this folder onto any HTTP server. For local development, you can run:
