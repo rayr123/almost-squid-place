@@ -10,8 +10,12 @@ try {
     }, {
         json: (data: any) => {
             console.log(data);
+            Deno.exit();
         }
     })
 } catch (err) {
     console.error(err);
+    Deno.exit();
+} finally {
+    Deno.exit();
 }
