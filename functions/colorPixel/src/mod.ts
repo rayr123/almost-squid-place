@@ -37,6 +37,13 @@ export default async function (req: any, res: any) {
     });
   }
 
+  if (payload.x < 0 || payload.y < 0 || payload.x > 499 || payload.y > 499) {
+    return res.json({
+      success: false,
+      message: "Please select valid location.",
+    });
+  }
+
   // Check for admin permissions
   const adminUsers = req.env.ADMIN_USERS.split(",");
   const isAdmin = adminUsers.includes(req.env["APPWRITE_FUNCTION_USER_ID"]);
