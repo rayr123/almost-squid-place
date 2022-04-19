@@ -19,8 +19,11 @@ export default async function (req: any, res: any) {
   const payload = JSON.parse(req.payload || "{}");
 
   // Validate position
-  if (!payload.x || !payload.y) {
+  if (!payload.x) {
     payload.x = 0;
+  }
+
+  if (!payload.y) {
     payload.y = 0;
   }
 

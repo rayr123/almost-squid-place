@@ -322,8 +322,9 @@
 
           async fetchPixels() {
             documents = [];
-            count = 1;
+            let cursor = undefined;
 
+            hasNext = true;
             do {
               const response = await appwrite.database.listDocuments(
                 "pixelsPublic",
@@ -334,12 +335,20 @@
                   "y.greaterEqual(0)",
                 ],
                 100,
-                documents.length
+                undefined,
+                cursor,
+                "after"
               );
 
               documents.push(...response.documents);
-              count = response.total;
-            } while (documents.length < count);
+
+              if(response.documents.length > 0) {
+                cursor = response.documents[response.documents.length - 1].$id;
+              } else {
+                hasNext = false;
+              }
+            } while (hasNext);
+
             for (const document of documents) {
               if (!this.state.pixels[document.$id]) {
                 if (document.hex === "ffffff") {
