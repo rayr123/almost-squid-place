@@ -66,7 +66,7 @@ export default async function (req: any, res: any) {
 
   const newFile = await storage.createFile("pixels", 'unique()', filePath);
 
-  const allFiles = await storage.listFiles("pixels", undefined, 100);
+  const allFiles = await storage.listFiles("pixels", undefined, 100, 5);
 
   for (const file of allFiles.files) {
     if (file.$id !== newFile.$id) {
