@@ -341,7 +341,9 @@
               fileRes.files[0].$id
             );
 
-            const json = await (await fetch(fileUrl.href)).json();
+            const jsonText = await (await fetch(fileUrl.href)).text();
+
+            const json = JSON.parse(jsonText.split("}]}")[0] + "}]}");
 
             documents.push(...json.docs);
 
