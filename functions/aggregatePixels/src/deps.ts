@@ -1,1 +1,1 @@
-export * as sdk from "https://deno.land/x/appwrite@3.0.0/mod.ts";
+export * as sdk from 'https://github.com/Meldiron/sdk-for-deno/raw/fix-3/mod.ts';
