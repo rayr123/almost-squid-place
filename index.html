@@ -75,6 +75,8 @@
       referrerpolicy="no-referrer"
     ></script>
 
+    <script src="https://cdn.jsdelivr.net/gh/bgrins/TinyColor/dist/tinycolor-min.js"></script>
+
     <script>
       window.authModal = {
         adapter: "appwrite",
@@ -156,6 +158,8 @@
             cooldown: null,
             interval: null,
 
+            isColoring: false,
+
             currentPixelData: null,
             currentPixelShow: false,
 
@@ -180,6 +184,9 @@
             posX: 0,
             posY: 0,
 
+            previousPixelColor: null,
+            previousPixelPosition: null,
+
             pixels: {},
           },
 
@@ -188,15 +195,18 @@
           sketch: null,
 
           async onColorPixel() {
-            if (this.state.isColoring) {
+            if (this.state.isColoring || this.state.currentPixelPos === null) {
               return;
             }
 
-            this.state.isColoring = true;
-
             try {
+              this.state.isColoring = true;
+
               const color = this.state.selectedColor;
-              const pixel = this.getCurrentPixel();
+              const pixel = {
+                x: this.state.currentPixelPos[0],
+                y: this.state.currentPixelPos[1],
+              };
 
               try {
                 await appwrite.account.get();
@@ -225,6 +235,8 @@
               if (!resJson.success && resJson.message) {
                 throw new Error(resJson.message);
               }
+
+              this.state.previousPixelColor = this.sketch.color(color);
 
               if (resJson.skipDelay) {
                 this.state.cooldown = 0;
@@ -367,6 +379,61 @@
             }
 
             this.render(true);
+            this.calculateCenter();
+          },
+
+          calculateCenter() {
+            const pixelSize = 1 * this.state.zoom;
+
+            const k = this.state.zoom * (500 / 2);
+            const left = -(this.state.posX - k);
+            const top = -(this.state.posY - k);
+
+            this.state.currentPixelPos = [
+              Math.floor(left / pixelSize),
+              Math.floor(top / pixelSize),
+            ];
+
+            if (this.state.previousPixelPosition !== null) {
+              this.sketch.set(
+                this.state.previousPixelPosition[0],
+                this.state.previousPixelPosition[1],
+                this.state.previousPixelColor
+              );
+              this.sketch.updatePixels();
+            }
+
+            const currentPixelColor = this.sketch.get(
+              this.state.currentPixelPos[0],
+              this.state.currentPixelPos[1]
+            );
+
+            const tinyColor = tinycolor(
+              `rgb(${currentPixelColor[0]}, ${currentPixelColor[1]}, ${currentPixelColor[2]})`
+            );
+
+            let darkerPixelColorHex;
+            if (tinyColor.isLight()) {
+              darkerPixelColorHex = tinyColor.darken(35).toString();
+            } else {
+              darkerPixelColorHex = tinyColor.brighten(35).toString();
+            }
+
+            const clr = this.sketch.color(darkerPixelColorHex);
+            this.sketch.set(
+              this.state.currentPixelPos[0],
+              this.state.currentPixelPos[1],
+              clr
+            );
+            this.sketch.updatePixels();
+
+            this.state.previousPixelColor = currentPixelColor;
+            this.state.previousPixelPosition = this.state.currentPixelPos;
+
+            const currentCursorPixel = this.state.pixels[`${this.state.currentPixelPos[0]}_${this.state.currentPixelPos[1]}`];
+
+            this.state.currentPixelShow = currentCursorPixel !== undefined;
+            this.state.currentPixelData = currentCursorPixel === undefined ? this.state.currentPixelData : currentCursorPixel;
           },
 
           onMouseDown(event) {
@@ -399,8 +466,10 @@
             const moveX = event.touches[0].screenX - this.state.lastTouch.x;
             const moveY = event.touches[0].screenY - this.state.lastTouch.y;
 
-            this.state.posX += moveX * (1 / this.state.zoom);
-            this.state.posY += moveY * (1 / this.state.zoom);
+            this.state.posX += moveX;
+            this.state.posY += moveY;
+
+            this.calculateCenter();
 
             this.state.lastTouch = {
               x: event.touches[0].screenX,
@@ -415,15 +484,19 @@
 
             const { movementY, movementX } = event;
 
-            this.state.posX += event.movementX * (1 / this.state.zoom);
-            this.state.posY += event.movementY * (1 / this.state.zoom);
+            this.state.posX += event.movementX;
+            this.state.posY += event.movementY;
+
+            this.calculateCenter();
           },
 
           onScroll(event) {
+            const originalDistance = this.state.zoom;
+
             let scroll = -event.deltaY;
             this.state.zoom += scroll / 200;
 
-            this.checkZoom();
+            this.checkZoom(originalDistance);
 
             event.preventDefault();
             event.stopPropagation();
@@ -459,8 +532,9 @@
                   }
                 }
 
+                this.calculateCenter();
+
                 if (isAction) {
-                  this.sketch.noStroke();
                   const clr = this.sketch.color("#" + actionColor);
                   this.sketch.set(actionPos[0], actionPos[1], clr);
                   this.sketch.updatePixels();
@@ -478,11 +552,76 @@
                   this.canvas = canvas;
                   this.sketch = sketch;
 
+                  this.sketch.noStroke();
+
                   this.fetchPixels();
                 };
 
                 // DO NOT USE
                 sketch.draw = () => {};
+
+                sketch.keyPressed = (event) => {
+                  if (
+                    event.target.nodeName.toLowerCase() !== "canvas" &&
+                    event.target.nodeName.toLowerCase() !== "body"
+                  ) {
+                    return;
+                  }
+
+                  if (event.key === " ") {
+                    this.onColorPixel();
+                    return;
+                  }
+
+                  if (!isNaN(event.key)) {
+                    const colorIndex = +event.key - 1;
+                    this.state.selectedColor = this.config.colors[colorIndex];
+                    return;
+                  }
+
+                  let moveX = 0;
+                  let moveY = 0;
+
+                  if (
+                    event.key === "A" ||
+                    event.key === "a" ||
+                    event.key === "ArrowLeft"
+                  ) {
+                    moveX = 1;
+                  }
+
+                  if (
+                    event.key === "D" ||
+                    event.key === "d" ||
+                    event.key === "ArrowRight"
+                  ) {
+                    moveX = -1;
+                  }
+
+                  if (
+                    event.key === "W" ||
+                    (event.key === "w") | (event.key === "ArrowUp")
+                  ) {
+                    moveY = 1;
+                  }
+
+                  if (
+                    event.key === "S" ||
+                    event.key === "s" ||
+                    event.key === "ArrowDown"
+                  ) {
+                    moveY = -1;
+                  }
+
+                  if (event.shiftKey) {
+                    moveX *= 3;
+                    moveY *= 3;
+                  }
+
+                  this.state.posX += moveX * this.state.zoom;
+                  this.state.posY += moveY * this.state.zoom;
+                  this.calculateCenter();
+                };
               };
 
               this.p5 = new p5(s);
@@ -496,6 +635,7 @@
           goToCenter() {
             this.state.posX = 0;
             this.state.posY = 0;
+            this.calculateCenter();
           },
 
           exportScreenshot() {
@@ -530,22 +670,70 @@
           },
 
           zoomOut() {
+            const originalDistance = this.state.zoom;
             this.state.zoom /= 1.5;
-            this.checkZoom();
+
+            this.checkZoom(originalDistance);
           },
 
           zoomIn() {
+            const originalDistance = this.state.zoom;
             this.state.zoom *= 1.5;
-            this.checkZoom();
+
+            this.checkZoom(originalDistance);
           },
 
-          checkZoom() {
+          checkZoom(originalZoom) {
             if (this.state.zoom < 1) {
               this.state.zoom = 1;
             }
             if (this.state.zoom > 100) {
               this.state.zoom = 100;
             }
+
+            const originalWidth = +document
+              .querySelector("#defaultCanvas0")
+              .style.width.split("px")[0];
+            const originalHeight = +document
+              .querySelector("#defaultCanvas0")
+              .style.height.split("px")[0];
+
+            const newWidth = 500 * this.state.zoom;
+            const newHeight = 500 * this.state.zoom;
+
+            document.querySelector("#defaultCanvas0").style.width =
+              newWidth + "px";
+            document.querySelector("#defaultCanvas0").style.height =
+              newHeight + "px";
+
+            const originalDistance = this.distanceFromCenter(
+              this.state.posX,
+              this.state.posY,
+              originalZoom
+            );
+            const newDistance = this.distanceFromCenter(
+              this.state.posX,
+              this.state.posY,
+              this.state.zoom
+            );
+
+            const diffX = originalDistance[0] - newDistance[0];
+            const diffY = originalDistance[1] - newDistance[1];
+
+            this.state.posX += diffX;
+            this.state.posY += diffY;
+
+            this.calculateCenter();
+          },
+
+          distanceFromCenter(x, y, zoom) {
+            const middleX = zoom * (500 / 2);
+            const middleY = zoom * (500 / 2);
+
+            const diffX = middleX - (x + 500 / 2) * zoom;
+            const diffY = middleY - (y + 500 / 2) * zoom;
+
+            return [diffX / this.state.zoom, diffY / this.state.zoom];
           },
 
           render(forced = false) {
@@ -557,7 +745,7 @@
 
             this.state.isReady = true;
 
-            this.sketch.pixelDensity(1);
+            //          this.sketch.pixelDensity(1);
             const clrBackground = this.sketch.color("#ffffff");
             for (let x = 0; x < pixelsX; x++) {
               for (let y = 0; y < pixelsY; y++) {
@@ -588,8 +776,6 @@
           },
 
           renderPixels() {
-            this.sketch.noStroke();
-
             const { pixels } = this.state;
 
             for (const pixel in pixels) {
@@ -771,23 +957,6 @@
               </div>
 
               <div
-                class="absolute inset-0 pointer-events-none flex items-center justify-center"
-              >
-                <template hidden x-if="state.isReady">
-                  <div class="z-10 border-white border-[1px]">
-                    <div
-                      x-bind:style="'width: ' + state.zoom + 'px; height: ' + state.zoom + 'px; border: ' + Math.max(1, state.zoom / 10) + 'px solid black'"
-                      class="border-gray-500 "
-                    >
-                      <div
-                        class="border-white border-[1px] w-full h-full"
-                      ></div>
-                    </div>
-                  </div>
-                </template>
-              </div>
-
-              <div
                 x-on:wheel="onScroll($event)"
                 x-on:mousedown="onMouseDown($event)"
                 x-on:mouseup="onMouseUp($event)"
@@ -801,7 +970,7 @@
                 <div
                   class="w-full h-full flex items-center justify-center"
                   id="appboard"
-                  x-bind:style="'transform: scale(' + state.zoom + ') translate(' + state.posX + 'px, ' + state.posY + 'px)'"
+                  x-bind:style="'transform: translate(' + state.posX + 'px, ' + state.posY + 'px)'"
                 ></div>
               </div>
             </div>
@@ -863,12 +1032,12 @@
                     x-bind:class="state.cooldown <= 0 ? 'bg-[#f02e65]' : 'bg-orange-400 opacity-50'"
                     class="flex items-center justify-center space-x-3 text-white bg-[#f02e65] w-full rounded-xl py-3 px-9"
                   >
-                    <template x-if="state.cooldown <= 0"
+                    <template hidden x-if="state.cooldown <= 0"
                       ><p
-                        x-text="'Color Pixel' + (state.currentPixelPos !== null ? ' (' + state.currentPixelPos[0] + ',' + state.currentPixelPos[1] + ')' : '')"
-                      ></p
+                      >Color Pixel</p
                     ></template>
-                    <template x-if="state.cooldown > 0"
+
+                    <template hidden x-if="state.cooldown > 0"
                       ><p
                         x-text="'Color in ' + state.cooldown + (state.cooldown <= 1 ? ' second' : ' seconds')"
                       ></p
@@ -1058,6 +1227,26 @@
                 <h3>✨ Tips and Tricks</h3>
 
                 <ul>
+                  <li>
+                    Center of the canvas is your cursor. This means that if you
+                    paint a pixel, it will paint the one in the middle of the
+                    canvas. You can drag&drop with your mouse to move around the
+                    canvas to move this cursor. The cursor is visible, so there
+                    shouldn't be any problem painting any pixel you want. If it
+                    feels tricky selecting a specific pixel, you can zoom in to
+                    make it easier.
+                  </li>
+                  <li>
+                    If you focus inside canvas (click it), you can now use WASD
+                    (or arrows) to move around. Hold SHIFT to move 3 pixels
+                    instead of one. You can also use numbers on the keyboard to
+                    switch colors and press SPACE to paint the pixel.
+                  </li>
+                  <li>
+                    If canvas lags on your device, you can zoom in. The more you
+                    are zoomed-in, the fewer pixels your device needs to render,
+                    the faster it is.
+                  </li>
                   <li>
                     If you paint the pixel white, it resets the pixel. You won't
                     see your name on such a pixel, it will become an empty
