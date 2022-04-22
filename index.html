@@ -51,13 +51,17 @@
     <style>
       body {
         font-family: "Quicksand", sans-serif;
-        overscroll-behavior: contain;
       }
       .custom-bg {
         background-color: linear-gradient(180deg, #f02e65 0%, #c81b4c 100%);
         background-image: url("/assets/bg.png");
         background-position: center;
         background-size: cover;
+      }
+      canvas {
+        image-rendering: pixelated;
+        image-rendering: -moz-crisp-edges;
+        image-rendering: crisp-edges;
       }
     </style>
 
@@ -70,6 +74,8 @@
       crossorigin="anonymous"
       referrerpolicy="no-referrer"
     ></script>
+
+    <script src="https://cdn.jsdelivr.net/gh/bgrins/TinyColor/dist/tinycolor-min.js"></script>
 
     <script>
       window.authModal = {
@@ -118,8 +124,6 @@
           config: Object.assign(
             {},
             {
-              scaleLevels: [0.1, 0.2, 0.5, 1, 2, 3, 4, 5, 7, 9, 10],
-
               delaySeconds: 10,
 
               pixelsX: 500,
@@ -144,10 +148,6 @@
                 "#654321",
                 "#808080",
               ],
-
-              pixelSize: 10,
-              pixelStokeSize: 1,
-              pixelStrokeLength: 3,
             },
             globalConfig
           ),
@@ -158,6 +158,8 @@
             cooldown: null,
             interval: null,
 
+            isColoring: false,
+
             currentPixelData: null,
             currentPixelShow: false,
 
@@ -167,13 +169,23 @@
             },
 
             isReady: false,
-            scaleLevel: 3, // Index, from 0.
-            positionX: 0,
-            positionY: 0,
 
             debounce: null,
 
             selectedColor: "#ff0000",
+
+            zoom: 1,
+            isDragging: false,
+
+            currentPixelPos: null,
+
+            lastTouch: null,
+
+            posX: 0,
+            posY: 0,
+
+            previousPixelColor: null,
+            previousPixelPosition: null,
 
             pixels: {},
           },
@@ -183,15 +195,18 @@
           sketch: null,
 
           async onColorPixel() {
-            if (this.state.isColoring) {
+            if (this.state.isColoring || this.state.currentPixelPos === null) {
               return;
             }
 
-            this.state.isColoring = true;
-
             try {
+              this.state.isColoring = true;
+
               const color = this.state.selectedColor;
-              const pixel = this.getCurrentPixel();
+              const pixel = {
+                x: this.state.currentPixelPos[0],
+                y: this.state.currentPixelPos[1],
+              };
 
               try {
                 await appwrite.account.get();
@@ -253,76 +268,6 @@
             }
           },
 
-          // Utility function
-          scaled(x, invert = false, customRounding = null) {
-            let scale = this.config.scaleLevels[this.state.scaleLevel];
-
-            if (invert) {
-              scale = scale / (scale * scale);
-            }
-
-            return customRounding
-              ? customRounding(x * scale)
-              : Math.floor(x * scale);
-          },
-
-          getCurrentPixel(pos = {}) {
-            if (!pos.x) {
-              pos.x = this.sketch.width / 2;
-            }
-
-            if (!pos.y) {
-              pos.y = this.sketch.height / 2;
-            }
-
-            const scaled = this.scaled.bind(this);
-
-            const { pixels, positionX, positionY } = this.state;
-
-            const {
-              pixelsX,
-              pixelsY,
-              pixelStrokeLength,
-              pixelStokeSize,
-              pixelSize,
-            } = this.config;
-
-            const mousePosX =
-              -scaled(positionX) + (pos.x - scaled(pixelStokeSize) / 2);
-            const mousePosY =
-              -scaled(positionY) + (pos.y - scaled(pixelStokeSize) / 2);
-
-            const currentPixelX = Math.floor(mousePosX / scaled(pixelSize));
-            const currentPixelY = Math.floor(mousePosY / scaled(pixelSize));
-
-            const pixel =
-              this.state.pixels[`${currentPixelX}_${currentPixelY}`];
-            if (pixel) {
-              this.state.currentPixelData = pixel;
-              this.state.currentPixelShow = true;
-            } else {
-              // this.state.currentPixelData = null;
-              this.state.currentPixelShow = false;
-            }
-
-            const currentPixel = {
-              x: currentPixelX,
-              y: currentPixelY,
-
-              left: scaled(currentPixelX) * pixelSize + scaled(positionX),
-              top: scaled(currentPixelY) * pixelSize + scaled(positionY),
-              right:
-                scaled(currentPixelX) * pixelSize +
-                scaled(positionX) +
-                scaled(pixelSize),
-              bottom:
-                scaled(currentPixelY) * pixelSize +
-                scaled(positionY) +
-                scaled(pixelSize),
-            };
-            return currentPixel;
-          },
-
           async fetchUsingStorage() {
             documents = [];
 
@@ -345,7 +290,7 @@
 
             const json = JSON.parse(jsonText.split("}]}")[0] + "}]}");
 
-            documents.push(...json.docs);
+            documents = json.docs;
 
             let cursor = undefined;
             hasNext = true;
@@ -416,8 +361,7 @@
               documents = await this.fetchUsingStorage();
             } catch (err) {
               console.error(err);
-
-              documents = await this.fetchUsingDatabase();
+              alert(err.message);
             }
 
             for (const document of documents) {
@@ -433,12 +377,144 @@
             }
 
             this.render(true);
+            this.calculateCenter();
+          },
+
+          calculateCenter() {
+            const pixelSize = 1 * this.state.zoom;
+
+            const k = this.state.zoom * (500 / 2);
+            const left = -(this.state.posX - k);
+            const top = -(this.state.posY - k);
+
+            this.state.currentPixelPos = [
+              Math.floor(left / pixelSize),
+              Math.floor(top / pixelSize),
+            ];
+
+            if (this.state.previousPixelPosition !== null) {
+              this.sketch.set(
+                this.state.previousPixelPosition[0],
+                this.state.previousPixelPosition[1],
+                this.state.previousPixelColor
+              );
+              this.sketch.updatePixels();
+            }
+
+            const currentPixelColor = this.sketch.get(
+              this.state.currentPixelPos[0],
+              this.state.currentPixelPos[1]
+            );
+
+            const tinyColor = tinycolor(
+              `rgb(${currentPixelColor[0]}, ${currentPixelColor[1]}, ${currentPixelColor[2]})`
+            );
+
+            let darkerPixelColorHex;
+            if (tinyColor.isLight()) {
+              darkerPixelColorHex = tinyColor.darken(35).toString();
+            } else {
+              darkerPixelColorHex = tinyColor.brighten(35).toString();
+            }
+
+            const clr = this.sketch.color(darkerPixelColorHex);
+            this.sketch.set(
+              this.state.currentPixelPos[0],
+              this.state.currentPixelPos[1],
+              clr
+            );
+            this.sketch.updatePixels();
+
+            this.state.previousPixelColor = currentPixelColor;
+            this.state.previousPixelPosition = this.state.currentPixelPos;
+
+            const currentCursorPixel =
+              this.state.pixels[
+                `${this.state.currentPixelPos[0]}_${this.state.currentPixelPos[1]}`
+              ];
+
+            this.state.currentPixelShow = currentCursorPixel !== undefined;
+            this.state.currentPixelData =
+              currentCursorPixel === undefined
+                ? this.state.currentPixelData
+                : currentCursorPixel;
+          },
+
+          onMouseDown(event) {
+            this.state.isDragging = true;
+          },
+
+          onMouseUp(event) {
+            this.state.isDragging = false;
+          },
+
+          onTouchStart(event) {
+            this.state.lastTouch = {
+              x: event.touches[0].screenX,
+              y: event.touches[0].screenY,
+            };
+          },
+
+          onTouchEnd(event) {
+            this.state.lastTouch = null;
+          },
+
+          onTouchMove(event) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            if (!this.state.lastTouch) {
+              return;
+            }
+
+            const moveX = event.touches[0].screenX - this.state.lastTouch.x;
+            const moveY = event.touches[0].screenY - this.state.lastTouch.y;
+
+            this.state.posX += moveX;
+            this.state.posY += moveY;
+
+            this.calculateCenter();
+
+            this.state.lastTouch = {
+              x: event.touches[0].screenX,
+              y: event.touches[0].screenY,
+            };
+          },
+
+          onMouseMove(event) {
+            if (!this.state.isDragging) {
+              return;
+            }
+
+            const { movementY, movementX } = event;
+
+            this.state.posX += event.movementX;
+            this.state.posY += event.movementY;
+
+            this.calculateCenter();
+          },
+
+          onScroll(event) {
+            const originalDistance = this.state.zoom;
+
+            let scroll = -event.deltaY;
+            this.state.zoom += scroll / 200;
+
+            this.checkZoom(originalDistance);
+
+            event.preventDefault();
+            event.stopPropagation();
           },
 
           init() {
             appwrite.subscribe(
               ["collections.pixelsPublic.documents"],
               (event) => {
+                let d = Date.now();
+                let isAction = false;
+                let actionColor = null;
+                let actionPos = null;
+
                 if (
                   event.event === "database.documents.update" ||
                   event.event === "database.documents.create"
@@ -446,12 +522,45 @@
                   if (event.payload.hex === "ffffff") {
                     if (this.state.pixels[event.payload.$id]) {
                       delete this.state.pixels[event.payload.$id];
+
+                      isAction = true;
+                      actionColor = "ffffff";
+                      actionPos = event.payload.$id.split("_");
                     }
                   } else {
                     this.state.pixels[event.payload.$id] = event.payload;
+
+                    isAction = true;
+                    actionColor = event.payload.hex;
+                    actionPos = event.payload.$id.split("_");
+                  }
+                }
+
+                if (isAction) {
+                  const pixelSize = 1 * this.state.zoom;
+
+                  const k = this.state.zoom * (500 / 2);
+                  const left = -(this.state.posX - k);
+                  const top = -(this.state.posY - k);
+
+                  const currentPos = [
+                    Math.floor(left / pixelSize),
+                    Math.floor(top / pixelSize),
+                  ];
+
+                  if (
+                    +actionPos[0] == currentPos[0] &&
+                    +actionPos[1] === currentPos[1]
+                  ) {
+                    this.state.previousPixelColor = this.sketch.color(
+                      "#" + actionColor
+                    );
+                    this.calculateCenter();
                   }
 
-                  this.render();
+                  const clr = this.sketch.color("#" + actionColor);
+                  this.sketch.set(actionPos[0], actionPos[1], clr);
+                  this.sketch.updatePixels();
                 }
               }
             );
@@ -459,17 +568,14 @@
             setTimeout(() => {
               const s = (sketch) => {
                 sketch.setup = () => {
-                  const width = document.getElementById("appboard").clientWidth;
-
-                  var canvas = sketch.createCanvas(
-                    width ? width : 1280,
-                    width ? (width / 16) * 9 : 720
-                  );
+                  var canvas = sketch.createCanvas(500, 500);
 
                   canvas.parent("appboard");
 
                   this.canvas = canvas;
                   this.sketch = sketch;
+
+                  this.sketch.noStroke();
 
                   this.fetchPixels();
                 };
@@ -504,7 +610,7 @@
                     event.key === "a" ||
                     event.key === "ArrowLeft"
                   ) {
-                    moveX = +this.config.pixelSize;
+                    moveX = 1;
                   }
 
                   if (
@@ -512,14 +618,14 @@
                     event.key === "d" ||
                     event.key === "ArrowRight"
                   ) {
-                    moveX = -this.config.pixelSize;
+                    moveX = -1;
                   }
 
                   if (
                     event.key === "W" ||
                     (event.key === "w") | (event.key === "ArrowUp")
                   ) {
-                    moveY = +this.config.pixelSize;
+                    moveY = 1;
                   }
 
                   if (
@@ -527,7 +633,7 @@
                     event.key === "s" ||
                     event.key === "ArrowDown"
                   ) {
-                    moveY = -this.config.pixelSize;
+                    moveY = -1;
                   }
 
                   if (event.shiftKey) {
@@ -535,64 +641,9 @@
                     moveY *= 3;
                   }
 
-                  this.state.positionX += moveX;
-                  this.state.positionY += moveY;
-
-                  if (moveX !== 0 || moveY !== 0) {
-                    this.render();
-                  }
-                };
-
-                sketch.mouseReleased = (event) => {
-                  this.state.touch.clientX = null;
-                  this.state.touch.clientY = null;
-                };
-
-                sketch.mouseDragged = (event) => {
-                  if (event.target.nodeName.toLowerCase() !== "canvas") {
-                    return;
-                  }
-
-                  event.stopPropagation();
-                  event.preventDefault();
-
-                  if (event.type === "touchmove") {
-                    const difX =
-                      this.state.touch.clientX === null
-                        ? 0
-                        : this.state.touch.clientX - event.touches[0].clientX;
-                    const difY =
-                      this.state.touch.clientY === null
-                        ? 0
-                        : this.state.touch.clientY - event.touches[0].clientY;
-
-                    event.movementX = -difX;
-                    event.movementY = -difY;
-
-                    this.state.touch.clientX = event.touches[0].clientX;
-                    this.state.touch.clientY = event.touches[0].clientY;
-                  }
-
-                  const scaled = this.scaled.bind(this);
-
-                  this.state.positionX += scaled(
-                    event.movementX,
-                    true,
-                    event.movementX < 0 ? Math.floor : Math.ceil
-                  );
-                  this.state.positionY += scaled(
-                    event.movementY,
-                    true,
-                    event.movementY < 0 ? Math.floor : Math.ceil
-                  );
-
-                  if (
-                    this.state.debounce === null ||
-                    this.state.debounce < Date.now() - 1
-                  ) {
-                    this.render();
-                    this.state.debounce = Date.now();
-                  }
+                  this.state.posX += moveX * this.state.zoom;
+                  this.state.posY += moveY * this.state.zoom;
+                  this.calculateCenter();
                 };
               };
 
@@ -600,12 +651,14 @@
             }, 1);
           },
 
-          repositionZoom(fromIndex, toIndex) {
-            // TODO: Reposition zoom to middle using positionX and this.sketch.width
-          },
-
           toggleInfo() {
             this.state.showInfoAlert = !this.state.showInfoAlert;
+          },
+
+          goToCenter() {
+            this.state.posX = 0;
+            this.state.posY = 0;
+            this.calculateCenter();
           },
 
           exportScreenshot() {
@@ -640,60 +693,92 @@
           },
 
           zoomOut() {
-            const currentLevel = this.state.scaleLevel;
-            this.state.scaleLevel = Math.max(this.state.scaleLevel - 1, 0);
+            const originalDistance = this.state.zoom;
+            this.state.zoom /= 1.5;
 
-            this.repositionZoom(currentLevel, this.state.scaleLevel);
-
-            this.render();
+            this.checkZoom(originalDistance);
           },
 
           zoomIn() {
-            const currentLevel = this.state.scaleLevel;
-            this.state.scaleLevel = Math.min(
-              this.state.scaleLevel + 1,
-              this.config.scaleLevels.length - 1
+            const originalDistance = this.state.zoom;
+            this.state.zoom *= 1.5;
+
+            this.checkZoom(originalDistance);
+          },
+
+          checkZoom(originalZoom) {
+            if (this.state.zoom < 1) {
+              this.state.zoom = 1;
+            }
+            if (this.state.zoom > 100) {
+              this.state.zoom = 100;
+            }
+
+            const originalWidth = +document
+              .querySelector("#defaultCanvas0")
+              .style.width.split("px")[0];
+            const originalHeight = +document
+              .querySelector("#defaultCanvas0")
+              .style.height.split("px")[0];
+
+            const newWidth = 500 * this.state.zoom;
+            const newHeight = 500 * this.state.zoom;
+
+            document.querySelector("#defaultCanvas0").style.width =
+              newWidth + "px";
+            document.querySelector("#defaultCanvas0").style.height =
+              newHeight + "px";
+
+            const originalDistance = this.distanceFromCenter(
+              this.state.posX,
+              this.state.posY,
+              originalZoom
+            );
+            const newDistance = this.distanceFromCenter(
+              this.state.posX,
+              this.state.posY,
+              this.state.zoom
             );
 
-            this.repositionZoom(currentLevel, this.state.scaleLevel);
+            const diffX = originalDistance[0] - newDistance[0];
+            const diffY = originalDistance[1] - newDistance[1];
 
-            this.render();
+            this.state.posX += diffX;
+            this.state.posY += diffY;
+
+            this.calculateCenter();
+          },
+
+          distanceFromCenter(x, y, zoom) {
+            const middleX = zoom * (500 / 2);
+            const middleY = zoom * (500 / 2);
+
+            const diffX = middleX - (x + 500 / 2) * zoom;
+            const diffY = middleY - (y + 500 / 2) * zoom;
+
+            return [diffX / this.state.zoom, diffY / this.state.zoom];
           },
 
           render(forced = false) {
+            const { pixelsX, pixelsY } = this.config;
+
             if (!forced && !this.state.isReady) {
               return;
             }
 
             this.state.isReady = true;
 
-            this.renderBackgroud();
+            //          this.sketch.pixelDensity(1);
+            const clrBackground = this.sketch.color("#ffffff");
+            for (let x = 0; x < pixelsX; x++) {
+              for (let y = 0; y < pixelsY; y++) {
+                this.sketch.set(x, y, clrBackground);
+              }
+            }
+
             this.renderPixels();
-            this.renderCursor();
-          },
 
-          renderBackgroud() {
-            const scaled = this.scaled.bind(this);
-            const { pixels, positionX, positionY } = this.state;
-
-            const {
-              pixelsX,
-              pixelsY,
-              pixelStrokeLength,
-              pixelStokeSize,
-              pixelSize,
-            } = this.config;
-
-            this.sketch.background("#e2e8f0");
-
-            this.sketch.noStroke();
-            this.sketch.fill("#ffffff");
-            this.sketch.rect(
-              scaled(positionX),
-              scaled(positionY),
-              scaled(pixelsX * pixelSize),
-              scaled(pixelsY * pixelSize)
-            );
+            this.sketch.updatePixels();
           },
 
           printDate(date) {
@@ -714,174 +799,13 @@
           },
 
           renderPixels() {
-            this.sketch.noStroke();
-
-            const scaled = this.scaled.bind(this);
-
-            const { pixels, positionX, positionY } = this.state;
-
-            const {
-              pixelsX,
-              pixelsY,
-              pixelStrokeLength,
-              pixelStokeSize,
-              pixelSize,
-            } = this.config;
-
-            const render = {};
-
-            const customRounding = (t) => t;
-            const screen = {};
-            screen.minX = Math.round(-positionX / pixelSize) - 1;
-            screen.minY = Math.round(-positionY / pixelSize) - 1;
-            screen.maxX =
-              screen.minX +
-              Math.round(
-                this.sketch.width / scaled(pixelSize, false, customRounding)
-              ) +
-              1;
-            screen.maxY =
-              screen.minY +
-              Math.round(
-                this.sketch.height / scaled(pixelSize, false, customRounding)
-              ) +
-              1;
+            const { pixels } = this.state;
 
             for (const pixel in pixels) {
-              const color = pixels[pixel].hex;
-              const pixelData = pixel.split("_");
-              const pX = +pixelData[0];
-              const pY = +pixelData[1];
-
-              if (
-                pX < screen.minX ||
-                pY < screen.minY ||
-                pX > screen.maxX ||
-                pY > screen.maxY
-              ) {
-                continue;
-              }
-
-              if (!render[color]) {
-                render[color] = {};
-              }
-
-              render[color][`${pX}_${pY}`] = true;
+              const pixelData = pixels[pixel];
+              const clr = this.sketch.color("#" + pixelData.hex);
+              this.sketch.set(pixelData.x, pixelData.y, clr);
             }
-
-            const banList = {};
-
-            for (const hex in render) {
-              this.sketch.fill("#" + hex);
-              for (const pos in render[hex]) {
-                if (banList[pos]) {
-                  continue;
-                }
-
-                const posArr = pos.split("_");
-                const posX = +posArr[0];
-                const posY = +posArr[1];
-
-                let widthPlus = 0;
-                let widthMinus = 0;
-                let posXTmp;
-
-                posXTmp = posX + 1;
-                while (render[hex][`${posXTmp}_${posY}`]) {
-                  banList[`${posXTmp}_${posY}`] = true;
-                  widthPlus++;
-                  posXTmp++;
-                }
-
-                posXTmp = posX - 1;
-                while (render[hex][`${posXTmp}_${posY}`]) {
-                  banList[`${posXTmp}_${posY}`] = true;
-                  widthMinus++;
-                  posXTmp--;
-                }
-
-                this.sketch.rect(
-                  scaled(positionX + (posX - widthMinus) * pixelSize),
-                  scaled(positionY + posY * pixelSize),
-                  scaled(pixelSize) * (1 + widthPlus + widthMinus),
-                  scaled(pixelSize)
-                );
-              }
-            }
-          },
-          renderCursor() {
-            this.sketch.noStroke();
-
-            const scaled = this.scaled.bind(this);
-            const { pixels, positionX, positionY } = this.state;
-
-            const {
-              pixelsX,
-              pixelsY,
-              pixelStrokeLength,
-              pixelStokeSize,
-              pixelSize,
-            } = this.config;
-
-            const currentPixel = this.getCurrentPixel();
-
-            this.sketch.fill("#475569");
-
-            this.sketch.rect(
-              currentPixel.left,
-              currentPixel.top,
-              scaled(pixelStrokeLength),
-              scaled(pixelStokeSize)
-            );
-
-            this.sketch.rect(
-              currentPixel.right - scaled(pixelStrokeLength),
-              currentPixel.top,
-              scaled(pixelStrokeLength),
-              scaled(pixelStokeSize)
-            );
-
-            this.sketch.rect(
-              currentPixel.left,
-              currentPixel.bottom - scaled(pixelStokeSize),
-              scaled(pixelStrokeLength),
-              scaled(pixelStokeSize)
-            );
-
-            this.sketch.rect(
-              currentPixel.right - scaled(pixelStrokeLength),
-              currentPixel.bottom - scaled(pixelStokeSize),
-              scaled(pixelStrokeLength),
-              scaled(pixelStokeSize)
-            );
-
-            this.sketch.rect(
-              currentPixel.left,
-              currentPixel.top,
-              scaled(pixelStokeSize),
-              scaled(pixelStrokeLength)
-            );
-
-            this.sketch.rect(
-              currentPixel.right - scaled(pixelStokeSize),
-              currentPixel.top,
-              scaled(pixelStokeSize),
-              scaled(pixelStrokeLength)
-            );
-
-            this.sketch.rect(
-              currentPixel.left,
-              currentPixel.bottom - scaled(pixelStrokeLength),
-              scaled(pixelStokeSize),
-              scaled(pixelStrokeLength)
-            );
-
-            this.sketch.rect(
-              currentPixel.right - scaled(pixelStokeSize),
-              currentPixel.bottom - scaled(pixelStrokeLength),
-              scaled(pixelStokeSize),
-              scaled(pixelStrokeLength)
-            );
           },
         };
       }
@@ -910,9 +834,11 @@
         />
 
         <div
-          class="relative z-20 flex flex-col items-center justify-center h-screen pb-20"
+          class="relative z-20 flex flex-col items-center justify-center h-[100vh] py-10"
         >
-          <div class="flex items-center mb-2 justify-center space-x-3">
+          <div
+            class="flex-shrink-0 flex items-center mb-2 justify-center space-x-3"
+          >
             <h1 class="text-white font-bold text-3xl text-center">
               Almost Reddit Place
             </h1>
@@ -942,14 +868,16 @@
           </div>
 
           <template hidden x-if="!state.isReady">
-            <p class="mt-2 text-white font-bold text-lg text-center">
+            <p
+              class="flex-shrink-0 mt-2 text-white font-bold text-lg text-center"
+            >
               From time to time, we need to load a big file. Please be patient
               if load takes up to a minute.
             </p>
           </template>
 
           <div
-            class="mt-4 touch-manipulation container bg-white rounded-xl overflow-hidden relative"
+            class="h-full mt-4 touch-manipulation container bg-white rounded-xl overflow-hidden relative"
           >
             <div
               x-show="state.currentPixelShow"
@@ -971,8 +899,8 @@
               ></div>
             </div>
 
-            <div class="relative">
-              <div class="absolute top-4 left-4 flex flex-col space-y-4">
+            <div class="relative h-full overflow-hidden bg-[#e2e8f0]">
+              <div class="z-10 absolute top-4 left-4 flex flex-col space-y-4">
                 <button
                   x-on:click="toggleInfo()"
                   class="p-3 rounded-full bg-red-100 text-red-600 hover:bg-red-200"
@@ -990,9 +918,27 @@
                     />
                   </svg>
                 </button>
+
+                <button
+                  x-on:click="goToCenter()"
+                  class="p-3 rounded-full bg-red-100 text-red-600 hover:bg-red-200"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="h-5 w-5"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                  >
+                    <path
+                      fill-rule="evenodd"
+                      d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z"
+                      clip-rule="evenodd"
+                    />
+                  </svg>
+                </button>
               </div>
 
-              <div class="absolute top-4 right-4 flex flex-col space-y-4">
+              <div class="z-10 absolute top-4 right-4 flex flex-col space-y-4">
                 <button
                   x-on:click="zoomIn()"
                   class="p-3 rounded-full bg-red-100 text-red-600 hover:bg-red-200"
@@ -1033,12 +979,28 @@
                 </button>
               </div>
 
-              <div id="appboard"></div>
+              <div
+                x-on:wheel="onScroll($event)"
+                x-on:mousedown="onMouseDown($event)"
+                x-on:mouseup="onMouseUp($event)"
+                x-on:mousemove="onMouseMove($event)"
+                x-on:touchmove="onTouchMove($event)"
+                x-on:touchend="onTouchEnd($event)"
+                x-on:touchcancel="onTouchEnd($event)"
+                x-on:touchstart="onTouchStart($event)"
+                class="w-full h-full flex items-center justify-center"
+              >
+                <div
+                  class="w-full h-full flex items-center justify-center"
+                  id="appboard"
+                  x-bind:style="'transform: translate(' + state.posX + 'px, ' + state.posY + 'px)'"
+                ></div>
+              </div>
             </div>
           </div>
 
           <div
-            class="mt-3 container bg-white rounded-xl p-4 grid grid-cols-12 gap-4"
+            class="flex-shrink-0 mt-3 container bg-white rounded-xl p-4 grid grid-cols-12 gap-4"
           >
             <div
               class="overflow-x-auto col-span-12 md:col-span-8 flex flex-row space-x-3 items-center h-full"
@@ -1093,10 +1055,11 @@
                     x-bind:class="state.cooldown <= 0 ? 'bg-[#f02e65]' : 'bg-orange-400 opacity-50'"
                     class="flex items-center justify-center space-x-3 text-white bg-[#f02e65] w-full rounded-xl py-3 px-9"
                   >
-                    <template x-if="state.cooldown <= 0"
+                    <template hidden x-if="state.cooldown <= 0"
                       ><p>Color Pixel</p></template
                     >
-                    <template x-if="state.cooldown > 0"
+
+                    <template hidden x-if="state.cooldown > 0"
                       ><p
                         x-text="'Color in ' + state.cooldown + (state.cooldown <= 1 ? ' second' : ' seconds')"
                       ></p
@@ -1162,7 +1125,7 @@
             </template>
           </div>
 
-          <div class="container mx-auto">
+          <div class="container mx-auto hidden sm:block">
             <div class="flex w-full justify-end items-end space-x-3 mt-4">
               <a href="https://appwrite.io/" target="_blank">
                 <img
@@ -1273,9 +1236,9 @@
                 </p>
 
                 <p>
-                  In this game, anyone can color 1 pixel of 2000x2000 canvas
-                  every 10 seconds. There is a palette of colors you can pick
-                  from to create your masterpiece. If you want to work on a big
+                  In this game, anyone can color 1 pixel of 500x500 canvas every
+                  10 seconds. There is a palette of colors you can pick from to
+                  create your masterpiece. If you want to work on a big
                   painting, feel free to invite your friends to help you 🖼️
                 </p>
 
