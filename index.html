@@ -236,8 +236,6 @@
                 throw new Error(resJson.message);
               }
 
-              this.state.previousPixelColor = this.sketch.color(color);
-
               if (resJson.skipDelay) {
                 this.state.cooldown = 0;
                 if (this.state.interval) {
@@ -430,10 +428,16 @@
             this.state.previousPixelColor = currentPixelColor;
             this.state.previousPixelPosition = this.state.currentPixelPos;
 
-            const currentCursorPixel = this.state.pixels[`${this.state.currentPixelPos[0]}_${this.state.currentPixelPos[1]}`];
+            const currentCursorPixel =
+              this.state.pixels[
+                `${this.state.currentPixelPos[0]}_${this.state.currentPixelPos[1]}`
+              ];
 
             this.state.currentPixelShow = currentCursorPixel !== undefined;
-            this.state.currentPixelData = currentCursorPixel === undefined ? this.state.currentPixelData : currentCursorPixel;
+            this.state.currentPixelData =
+              currentCursorPixel === undefined
+                ? this.state.currentPixelData
+                : currentCursorPixel;
           },
 
           onMouseDown(event) {
@@ -532,9 +536,28 @@
                   }
                 }
 
-                this.calculateCenter();
-
                 if (isAction) {
+                  const pixelSize = 1 * this.state.zoom;
+
+                  const k = this.state.zoom * (500 / 2);
+                  const left = -(this.state.posX - k);
+                  const top = -(this.state.posY - k);
+
+                  const currentPos = [
+                    Math.floor(left / pixelSize),
+                    Math.floor(top / pixelSize),
+                  ];
+
+                  if (
+                    +actionPos[0] == currentPos[0] &&
+                    +actionPos[1] === currentPos[1]
+                  ) {
+                    this.state.previousPixelColor = this.sketch.color(
+                      "#" + actionColor
+                    );
+                    this.calculateCenter();
+                  }
+
                   const clr = this.sketch.color("#" + actionColor);
                   this.sketch.set(actionPos[0], actionPos[1], clr);
                   this.sketch.updatePixels();
@@ -1033,9 +1056,8 @@
                     class="flex items-center justify-center space-x-3 text-white bg-[#f02e65] w-full rounded-xl py-3 px-9"
                   >
                     <template hidden x-if="state.cooldown <= 0"
-                      ><p
-                      >Color Pixel</p
-                    ></template>
+                      ><p>Color Pixel</p></template
+                    >
 
                     <template hidden x-if="state.cooldown > 0"
                       ><p
