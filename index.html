@@ -77,6 +77,29 @@
 
     <script src="https://cdn.jsdelivr.net/gh/bgrins/TinyColor/dist/tinycolor-min.js"></script>
 
+        <script>
+      window.authModal = {
+        adapter: "appwrite",
+        config: {
+          endpoint: "https://appwrite.matejbaco.eu/v1",
+          projectId: "almostRedditPlaceV2",
+        },
+
+        // If using Uauth
+        oauths: [],
+        oauthSuccessUrl: window.location.origin + "/",
+        oauthErrorUrl: window.location.origin + "/",
+
+        // If using Magic URL
+        magicUrlRedirect: window.location.origin + "/",
+
+        // If supporting password recovery
+        passwordRecoveryRedirect: window.location.origin + "/",
+      };
+    </script>
+    <!-- Auth Modal -->
+    <script src="/auth-modal.js" defer></script>
+    
     <script>
       // You can define variable here with configurations for the application
       /*
